@@ -6,11 +6,13 @@ from tkinter import messagebox
 
 from maze import Maze
 from solver import (
-    AStarSolver,
     DFSSolver,
     BFSSolver,
     BidirectionalBFSSolver,
     GreedySolver,
+    AStarSolver,
+    IDAStarSolver,
+    BidirectionalAStarSolver,
 )
 
 
@@ -59,8 +61,10 @@ class MazeApp:
             "深度优先搜索 (DFS)": DFSSolver,
             "广度优先搜索 (BFS)": BFSSolver,
             "双向广度优先搜索": BidirectionalBFSSolver,
-            "A*算法": AStarSolver,
-            "贪心最佳优先搜索": GreedySolver,
+            "贪心搜索": GreedySolver,
+            "A*搜索": AStarSolver,
+            "双向A*搜索": BidirectionalAStarSolver,
+            "IDA*搜索": IDAStarSolver,
         }
 
         # 算法说明
@@ -68,8 +72,10 @@ class MazeApp:
             "深度优先搜索 (DFS)": "递归探索一条路径直到无法继续，内存占用小但不保证最短路径",
             "广度优先搜索 (BFS)": "按层次扩展搜索，在无权图中保证找到最短路径",
             "双向广度优先搜索": "同时从起点和终点搜索，在大型迷宫中通常更高效",
-            "A*算法": "结合实际代价和启发式估计，通常能找到最短路径",
-            "贪心最佳优先搜索": "仅使用启发式估计选择下一步，速度快但不保证最短路径",
+            "贪心搜索": "仅使用启发式估计选择下一步，速度快但不保证最短路径",
+            "A*搜索": "结合实际代价和启发式估计，通常能找到最短路径",
+            "双向A*搜索": "从起点和终点同时搜索，特别适合起点和终点距离较远的迷宫环境",
+            "IDA*搜索": "迭代加深A*，结合深度优先搜索和A*，适用于深度较大的迷宫",
         }
 
         self.current_algorithm = "深度优先搜索 (DFS)"
@@ -334,7 +340,7 @@ class MazeApp:
             y1 + 2,
             x2 - 2,
             y2 - 2,
-            fill="#4FC3F7",    # 中等深度的蓝色
+            fill="#4FC3F7",  # 中等深度的蓝色
             outline="#039BE5",  # 稍深的蓝色边框
             width=2,
         )

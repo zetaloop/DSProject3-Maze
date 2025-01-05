@@ -242,7 +242,58 @@ class BidirectionalBFSSolver(BaseSolver):
 
 
 # ---------------------------------------------------------------------------
-# 4. A* 寻路
+# 4. Greedy (Best-First) 搜索
+# ---------------------------------------------------------------------------
+class GreedySolver(BaseSolver):
+    """
+    贪心搜索：只看启发式 h(n) 最小的下一个节点，不累加代价。
+    因此不能保证路径最短，但在稀疏迷宫中可能很快接近目标。
+    """
+
+    def __init__(self, maze):
+        super().__init__(maze)
+        self.frontier = []
+        self.reset()
+
+    def reset(self):
+        super().reset()
+        h_start = self.heuristic(self.start, self.goal)
+        self.frontier = [(h_start, self.start)]
+        self.frontier_set.add(self.start)
+
+    def heuristic(self, pos1, pos2):
+        """曼哈顿距离"""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+
+    def step(self):
+        if not self.frontier:
+            return True
+
+        _, current = heapq.heappop(self.frontier)
+        self.current_position = current  # 更新当前位置
+        self.frontier_set.discard(current)
+
+        if current == self.goal:
+            self.build_path(current)
+            return True
+
+        self.visited.add(current)
+
+        # 扩展相邻节点
+        for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            nr, nc = current[0] + dr, current[1] + dc
+            if self.maze.is_valid(nr, nc) and (nr, nc) not in self.visited:
+                self.visited.add((nr, nc))  # 将新节点加入 visited
+                h_val = self.heuristic((nr, nc), self.goal)
+                heapq.heappush(self.frontier, (h_val, (nr, nc)))
+                self.frontier_set.add((nr, nc))
+                self.came_from[(nr, nc)] = current
+
+        return False
+
+
+# ---------------------------------------------------------------------------
+# 5. A* 寻路
 # ---------------------------------------------------------------------------
 class AStarSolver(BaseSolver):
     """
@@ -308,51 +359,200 @@ class AStarSolver(BaseSolver):
 
 
 # ---------------------------------------------------------------------------
-# 5. Greedy (Best-First) 搜索
+# 6. Iterative Deepening A* (IDA*)
 # ---------------------------------------------------------------------------
-class GreedySolver(BaseSolver):
+class IDAStarSolver(BaseSolver):
     """
-    贪心搜索：只看启发式 h(n) 最小的下一个节点，不累加代价。
-    因此不能保证路径最短，但在稀疏迷宫中可能很快接近目标。
+    Iterative Deepening A* - 通过迭代加深来减少内存使用，
+    特别适合内存受限的迷宫环境。
     """
 
     def __init__(self, maze):
         super().__init__(maze)
-        self.frontier = []
-        self.reset()
+        self.threshold = self.heuristic(self.start, self.goal)
+        self.path_stack = []
+        self.min_cost = float("inf")
 
     def reset(self):
         super().reset()
-        h_start = self.heuristic(self.start, self.goal)
-        self.frontier = [(h_start, self.start)]
-        self.frontier_set.add(self.start)
+        self.threshold = self.heuristic(self.start, self.goal)
+        self.path_stack = [self.start]
+        self.min_cost = float("inf")
 
     def heuristic(self, pos1, pos2):
         """曼哈顿距离"""
         return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
-    def step(self):
-        if not self.frontier:
-            return True
+    def search(self, current, g):
+        f = g + self.heuristic(current, self.goal)
+        if f > self.threshold:
+            self.min_cost = min(self.min_cost, f)
+            return False
 
-        _, current = heapq.heappop(self.frontier)
-        self.current_position = current  # 更新当前位置
+        self.current_position = current
         self.frontier_set.discard(current)
 
         if current == self.goal:
-            self.build_path(current)
+            self.path = list(self.path_stack)
             return True
 
         self.visited.add(current)
 
-        # 扩展相邻节点
         for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
             nr, nc = current[0] + dr, current[1] + dc
             if self.maze.is_valid(nr, nc) and (nr, nc) not in self.visited:
-                self.visited.add((nr, nc))  # 将新节点加入 visited
-                h_val = self.heuristic((nr, nc), self.goal)
-                heapq.heappush(self.frontier, (h_val, (nr, nc)))
+                self.path_stack.append((nr, nc))
                 self.frontier_set.add((nr, nc))
                 self.came_from[(nr, nc)] = current
+                if self.search((nr, nc), g + 1):
+                    return True
+                self.path_stack.pop()
+                self.frontier_set.discard((nr, nc))
+
+        return False
+
+    def step(self):
+        if self.search(self.start, 0):
+            return True
+        self.threshold = self.min_cost
+        self.min_cost = float("inf")
+        self.visited.clear()
+        self.frontier_set.clear()
+        self.path_stack = [self.start]
+        return False
+
+
+# ---------------------------------------------------------------------------
+# 7. Bidirectional A*
+# ---------------------------------------------------------------------------
+class BidirectionalAStarSolver(BaseSolver):
+    """
+    双向 A* - 从起点和终点同时搜索，
+    特别适合起点和终点距离较远的迷宫环境。
+    """
+
+    def __init__(self, maze):
+        super().__init__(maze)
+        self.start_frontier = []
+        self.goal_frontier = []
+        self.start_dist = {}
+        self.goal_dist = {}
+        self.meeting_point = None
+        self.reset()
+
+    def reset(self):
+        super().reset()
+        self.start_dist = {
+            (r, c): float("inf")
+            for r in range(self.maze.rows)
+            for c in range(self.maze.cols)
+        }
+        self.goal_dist = {
+            (r, c): float("inf")
+            for r in range(self.maze.rows)
+            for c in range(self.maze.cols)
+        }
+        self.start_dist[self.start] = 0
+        self.goal_dist[self.goal] = 0
+        self.start_frontier = [(self.heuristic(self.start, self.goal), 0, self.start)]
+        self.goal_frontier = [(self.heuristic(self.goal, self.start), 0, self.goal)]
+        self.frontier_set = {self.start, self.goal}
+        self.meeting_point = None
+
+    def heuristic(self, pos1, pos2):
+        """曼哈顿距离"""
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+
+    def build_bidirectional_path(self):
+        """拼接双向搜索的路径"""
+        # 从 meeting_point 往回走到 start
+        path_from_start = []
+        cur = self.meeting_point
+        while cur in self.came_from:
+            path_from_start.append(cur)
+            cur = self.came_from[cur]
+        path_from_start.append(self.start)
+        path_from_start.reverse()
+
+        # 从 meeting_point 往前走到 goal
+        path_to_goal = []
+        cur = self.meeting_point
+        while cur != self.goal:
+            for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                nr, nc = cur[0] + dr, cur[1] + dc
+                if (nr, nc) in self.goal_dist and self.goal_dist[
+                    (nr, nc)
+                ] == self.goal_dist[cur] - 1:
+                    path_to_goal.append(cur)
+                    cur = (nr, nc)
+                    break
+        path_to_goal.append(self.goal)
+
+        # 合并路径
+        self.path = path_from_start + path_to_goal
+
+    def step(self):
+        if not self.start_frontier and not self.goal_frontier:
+            return True
+
+        # 交替扩展两端
+        if len(self.start_frontier) <= len(self.goal_frontier):
+            # 扩展起点端
+            if not self.start_frontier:
+                return False
+
+            f, g, current = heapq.heappop(self.start_frontier)
+            self.current_position = current
+            self.frontier_set.discard(current)
+
+            if current in self.goal_dist:
+                self.meeting_point = current
+                self.build_bidirectional_path()
+                return True
+
+            if g > self.start_dist[current]:
+                return False
+
+            self.visited.add(current)
+
+            for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                nr, nc = current[0] + dr, current[1] + dc
+                if self.maze.is_valid(nr, nc):
+                    new_g = g + 1
+                    if new_g < self.start_dist[(nr, nc)]:
+                        self.start_dist[(nr, nc)] = new_g
+                        self.came_from[(nr, nc)] = current
+                        f_new = new_g + self.heuristic((nr, nc), self.goal)
+                        heapq.heappush(self.start_frontier, (f_new, new_g, (nr, nc)))
+                        self.frontier_set.add((nr, nc))
+        else:
+            # 扩展终点端
+            if not self.goal_frontier:
+                return False
+
+            f, g, current = heapq.heappop(self.goal_frontier)
+            self.current_position = current
+            self.frontier_set.discard(current)
+
+            if current in self.start_dist:
+                self.meeting_point = current
+                self.build_bidirectional_path()
+                return True
+
+            if g > self.goal_dist[current]:
+                return False
+
+            self.visited.add(current)
+
+            for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                nr, nc = current[0] + dr, current[1] + dc
+                if self.maze.is_valid(nr, nc):
+                    new_g = g + 1
+                    if new_g < self.goal_dist[(nr, nc)]:
+                        self.goal_dist[(nr, nc)] = new_g
+                        self.came_from[(nr, nc)] = current
+                        f_new = new_g + self.heuristic((nr, nc), self.start)
+                        heapq.heappush(self.goal_frontier, (f_new, new_g, (nr, nc)))
+                        self.frontier_set.add((nr, nc))
 
         return False
