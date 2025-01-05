@@ -50,7 +50,7 @@ class Maze:
     def carve_space_around(self, cell, steps=1):
         """
         确保 cell 附近有一定数量的空间，避免把起点/终点埋在墙里。
-        steps 可以视为想要 carve 的“半径”或“额外步数”。
+        steps 可以视为想要 carve 的"半径"或"额外步数"。
         （示例中做法很简单：基于 BFS 随机拓展若干步以打通一些区域。）
         """
         (sr, sc) = cell
@@ -80,12 +80,8 @@ class Maze:
 
     def bridge_start_goal(self):
         """
-        如果从 start 到 goal 不可达，则尝试在迷宫中“桥接”两片区域。
-        做法大致：
-        1. 找到 start 所在连通分量 S，goal 所在连通分量 G。
-        2. 如果 S == G 则说明已连通，退出。
-        3. 否则，从 S 和 G 中各拿一个边缘点，沿着两者间的直线或随机线路进行 carve，使得S与G合并。
-        4. 或者做更复杂的多段式桥接，这里给出一个相对简单的示例。
+        如果从 start 到 goal 不可达，则尝试在迷宫中"桥接"两片区域。
+        改进版本：使用多点连接策略和智能路径规划。
         """
 
         # 首先 BFS 获取 start 区域
@@ -112,58 +108,71 @@ class Maze:
             return  # 已连通，不用桥接
 
         goal_region = get_region_bfs(self.goal)
-        # 找两个最近点，分别在 start_region 和 goal_region 中
-        # （这里可以更智能一些，比如先抽样再计算最短距离，这里简单实现“暴力找最小距离”的示例）
-        min_dist = float("inf")
-        pair_to_connect = (None, None)
+
+        # 找到多个可能的连接点对
+        connection_pairs = []
         for sr, sc in start_region:
             for gr, gc in goal_region:
-                dist = (sr - gr) ** 2 + (sc - gc) ** 2
-                if dist < min_dist:
-                    min_dist = dist
-                    pair_to_connect = ((sr, sc), (gr, gc))
+                dist = abs(sr - gr) + abs(sc - gc)  # 曼哈顿距离
+                connection_pairs.append(((sr, sc), (gr, gc), dist))
 
-        # 如果找不到合适的点，说明没必要连通或其他情况
-        if pair_to_connect == (None, None):
-            return
+        # 按距离排序，选择前几个最近的点对
+        connection_pairs.sort(key=lambda x: x[2])
+        top_pairs = connection_pairs[: min(5, len(connection_pairs))]
 
-        (sr, sc), (gr, gc) = pair_to_connect
+        # 对每个点对尝试连接，直到成功
+        for (sr, sc), (gr, gc), _ in top_pairs:
+            if self.try_connect_points(sr, sc, gr, gc):
+                break
 
-        # 用一个简单的随机走近式 carve 来“桥接”两点
-        # （替代原来的“一条笔直线”）
-        r, c = sr, sc
-        attempts = 0
-        max_attempts = self.rows * self.cols  # 防止死循环
-        while (r, c) != (gr, gc) and attempts < max_attempts:
-            self.grid[r][c] = 0
-            # 随机选择一个方向，让 (r,c) 向 (gr,gc) 移动
-            dr = 0
-            dc = 0
-            if r < gr:
-                dr = 1
-            elif r > gr:
-                dr = -1
-            if c < gc:
-                dc = 1
-            elif c > gc:
-                dc = -1
+    def try_connect_points(self, sr, sc, gr, gc):
+        """使用改进的连接算法尝试连接两点"""
 
-            # 有一定概率“拐个弯”，避免就是笔直
-            if random.random() < 0.3:
-                # 随机略微往其它方向偏移
-                rand_dir = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
-                dr2, dc2 = rand_dir
-                # 50% 几率用这个拐弯
-                if random.random() < 0.5:
-                    dr, dc = dr2, dc2
+        # 使用A*启发式来引导路径
+        def heuristic(r, c):
+            return abs(r - gr) + abs(c - gc)
 
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < self.rows and 0 <= nc < self.cols:
-                r, c = nr, nc
-            attempts += 1
+        visited = set()
+        # 优先队列：(启发值, 当前坐标)
+        queue = [(heuristic(sr, sc), (sr, sc))]
+        came_from = {(sr, sc): None}
 
-        # 最后再 carve 终点，以防止它是墙
-        self.grid[gr][gc] = 0
+        while queue:
+            _, (r, c) = min(queue)  # 取启发值最小的点
+            queue.remove((_, (r, c)))
+
+            if (r, c) == (gr, gc):
+                # 找到路径，开始carve
+                current = (r, c)
+                while current in came_from and came_from[current] is not None:
+                    self.grid[current[0]][current[1]] = 0
+                    current = came_from[current]
+                return True
+
+            visited.add((r, c))
+
+            # 尝试四个方向，但加入智能绕路
+            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+            random.shuffle(directions)  # 增加一些随机性，避免路径过于规则
+
+            for dr, dc in directions:
+                nr, nc = r + dr, c + dc
+                if (
+                    0 <= nr < self.rows
+                    and 0 <= nc < self.cols
+                    and (nr, nc) not in visited
+                ):
+                    # 计算新的启发值
+                    h_val = heuristic(nr, nc)
+
+                    # 如果是墙，增加一些代价，但不要完全排除
+                    if self.grid[nr][nc] == 1:
+                        h_val += 2
+
+                    queue.append((h_val, (nr, nc)))
+                    came_from[(nr, nc)] = (r, c)
+
+        return False
 
     # ----------------------------------------------------------------
     # 下面是各类迷宫生成函数（示例）
@@ -171,7 +180,7 @@ class Maze:
 
     def generate_traditional_maze(self, ensure_path=True):
         """
-        使用 DFS 生成传统迷宫，但可以通过在 carve 过程中“随机跳过”来控制是否整体连通。
+        使用 DFS 生成传统迷宫，但可以通过在 carve 过程中"随机跳过"来控制是否整体连通。
         ensure_path=True ->  最终会保证从 start 到 goal 连通（通过 bridge）。
         ensure_path=False -> 最终不一定连通。
         """
@@ -191,7 +200,7 @@ class Maze:
             for dr, dc in directions:
                 nr, nc = r + 2 * dr, c + 2 * dc
                 if valid_cell(nr, nc) and (nr, nc) not in visited:
-                    # 为了可能形成不连通区域，加入一个“随机放弃 carve”的机制
+                    # 为了可能形成不连通区域，加入一个"随机放弃 carve"的机制
                     if random.random() < 0.9 or ensure_path:
                         # 打通中间墙
                         self.grid[r + dr][c + dc] = 0
@@ -217,7 +226,7 @@ class Maze:
 
     def generate_river_maze(self, ensure_path=True):
         """
-        生成“河流”型迷宫，通道更狭窄且蜿蜒。
+        生成"河流"型迷宫，通道更狭窄且蜿蜒。
         若 ensure_path=True，则最终桥接 start->goal 。
         """
         # 先将全图置为墙
@@ -314,7 +323,7 @@ class Maze:
 
     def generate_block_maze(self, min_size=3, max_size=6, ensure_path=True):
         """
-        生成块状障碍物，类似于在空地上随机放置一些“巨石”或大方块。
+        生成块状障碍物，类似于在空地上随机放置一些"巨石"或大方块。
         ensure_path=True -> 最后保证 start->goal 可达（桥接）
         ensure_path=False -> 不一定通
         """
