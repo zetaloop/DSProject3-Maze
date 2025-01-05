@@ -9,8 +9,8 @@ from solver import (
     AStarSolver,
     DFSSolver,
     BFSSolver,
-    DijkstraSolver,
     BidirectionalBFSSolver,
+    GreedySolver,
 )
 
 
@@ -38,11 +38,21 @@ class MazeApp:
         # 算法字典
         self.solver_classes = {
             "A*算法": AStarSolver,
-            "深度优先搜索": DFSSolver,
-            "广度优先搜索": BFSSolver,
-            "Dijkstra算法": DijkstraSolver,
+            "深度优先搜索 (DFS)": DFSSolver,
+            "广度优先搜索 (BFS)": BFSSolver,
             "双向广度优先搜索": BidirectionalBFSSolver,
+            "贪心最佳优先搜索": GreedySolver,
         }
+
+        # 算法说明
+        self.algorithm_descriptions = {
+            "A*算法": "结合实际代价和启发式估计，通常能找到最短路径",
+            "深度优先搜索 (DFS)": "递归探索一条路径直到无法继续，内存占用小但不保证最短路径",
+            "广度优先搜索 (BFS)": "按层次扩展搜索，在无权图中保证找到最短路径",
+            "双向广度优先搜索": "同时从起点和终点搜索，在大型迷宫中通常更高效",
+            "贪心最佳优先搜索": "仅使用启发式估计选择下一步，速度快但不保证最短路径",
+        }
+
         self.current_algorithm = "A*算法"
         self.solver = self.solver_classes[self.current_algorithm](self.maze)
         self.is_solving = False
@@ -55,9 +65,7 @@ class MazeApp:
         self.create_canvas()
 
     def setup_ui(self):
-        """
-        创建顶部控制区域、速度调节、按钮等
-        """
+        """创建顶部控制区域、速度调节、按钮等"""
         # 创建主控制框架
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -76,39 +84,53 @@ class MazeApp:
         generate_button.pack(side=tk.LEFT, padx=5)
         generate_button.configure(style="Custom.TButton")
 
-        # 算法选择下拉框
-        algorithm_frame = ttk.Frame(left_button_frame)
-        algorithm_frame.pack(side=tk.LEFT, padx=5)
+        # 算法选择区域
+        algorithm_frame = ttk.LabelFrame(main_frame, text="算法选择")
+        algorithm_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        ttk.Label(algorithm_frame, text="算法：").pack(side=tk.LEFT)
+        # 算法选择下拉框
+        combo_frame = ttk.Frame(algorithm_frame)
+        combo_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Label(combo_frame, text="选择算法：").pack(side=tk.LEFT)
         self.algorithm_var = tk.StringVar(value=self.current_algorithm)
         algorithm_combo = ttk.Combobox(
-            algorithm_frame,
+            combo_frame,
             textvariable=self.algorithm_var,
             values=list(self.solver_classes.keys()),
             state="readonly",
-            width=15,
+            width=25,
         )
-        algorithm_combo.pack(side=tk.LEFT)
+        algorithm_combo.pack(side=tk.LEFT, padx=5)
         algorithm_combo.bind("<<ComboboxSelected>>", self.on_algorithm_changed)
 
+        # 算法描述标签
+        self.description_label = ttk.Label(
+            algorithm_frame,
+            text=self.algorithm_descriptions[self.current_algorithm],
+            wraplength=600,
+            justify=tk.LEFT,
+            font=self.small_font,
+        )
+        self.description_label.pack(fill=tk.X, padx=5, pady=5)
+
+        # 控制按钮组
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
+
         self.start_button = ttk.Button(
-            left_button_frame, text="开始求解", command=self.on_start_solving
+            button_frame, text="开始求解", command=self.on_start_solving
         )
         self.start_button.pack(side=tk.LEFT, padx=5)
         self.start_button.configure(style="Custom.TButton")
 
-        reset_button = ttk.Button(left_button_frame, text="重置", command=self.on_reset)
+        reset_button = ttk.Button(button_frame, text="重置", command=self.on_reset)
         reset_button.pack(side=tk.LEFT, padx=5)
         reset_button.configure(style="Custom.TButton")
 
-        # 右侧控制组
-        right_control_frame = ttk.Frame(control_frame)
-        right_control_frame.pack(side=tk.RIGHT)
-
         # 主题切换按钮
         theme_button = ttk.Button(
-            right_control_frame, text="切换主题", command=self.toggle_theme
+            button_frame, text="切换主题", command=self.toggle_theme
         )
         theme_button.pack(side=tk.RIGHT, padx=5)
         theme_button.configure(style="Custom.TButton")
@@ -117,7 +139,7 @@ class MazeApp:
         speed_frame = ttk.LabelFrame(main_frame, text="动画速度")
         speed_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.speed_var = tk.IntVar(value=70)  # 修改默认值
+        self.speed_var = tk.IntVar(value=70)
         speed_scale = ttk.Scale(
             speed_frame,
             from_=1,
@@ -127,9 +149,10 @@ class MazeApp:
         )
         speed_scale.pack(fill=tk.X, padx=10, pady=5)
 
-        # 添加速度说明标签
         speed_label = ttk.Label(
-            speed_frame, text="向右拖动提高速度", font=self.small_font
+            speed_frame,
+            text="向右拖动提高速度（1-100）",
+            font=self.small_font,
         )
         speed_label.pack(pady=(0, 5))
 
@@ -323,6 +346,10 @@ class MazeApp:
         """当选择的算法改变时调用"""
         self.current_algorithm = self.algorithm_var.get()
         self.solver = self.solver_classes[self.current_algorithm](self.maze)
+        # 更新算法描述
+        self.description_label.config(
+            text=self.algorithm_descriptions[self.current_algorithm]
+        )
         self.on_reset()  # 重置当前状态
 
 
