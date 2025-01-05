@@ -174,8 +174,77 @@ class Maze:
 
         return False
 
+    def force_connect(self):
+        """
+        强制打通起点到终点的路径。
+        原理：找到最近的两个点对，然后强制连接。
+        """
+
+        # 首先获取起点和终点所在的连通区域
+        def get_region(start_point):
+            region = set()
+            queue = deque([start_point])
+            region.add(start_point)
+
+            while queue:
+                r, c = queue.popleft()
+                for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nr, nc = r + dr, c + dc
+                    if (
+                        0 <= nr < self.rows
+                        and 0 <= nc < self.cols
+                        and self.grid[nr][nc] == 0
+                        and (nr, nc) not in region
+                    ):
+                        region.add((nr, nc))
+                        queue.append((nr, nc))
+            return region
+
+        # 获取两个区域
+        start_region = get_region(self.start)
+        if self.goal in start_region:  # 如果已经连通，直接返回
+            return True
+
+        goal_region = get_region(self.goal)
+
+        # 找到两个区域之间的最近点对
+        min_dist = float("inf")
+        best_pair = None
+
+        for sr, sc in start_region:
+            for gr, gc in goal_region:
+                dist = abs(sr - gr) + abs(sc - gc)  # 曼哈顿距离
+                if dist < min_dist:
+                    min_dist = dist
+                    best_pair = ((sr, sc), (gr, gc))
+
+        if best_pair is None:  # 这种情况理论上不会发生
+            return False
+
+        # 强制打通这两点之间的路径
+        (sr, sc), (gr, gc) = best_pair
+
+        # 使用直线路径打通
+        r, c = sr, sc
+        while r != gr or c != gc:
+            # 优先在距离更大的方向移动
+            if abs(r - gr) > abs(c - gc):
+                r += 1 if gr > r else -1
+            else:
+                c += 1 if gc > c else -1
+            self.grid[r][c] = 0  # 强制打通
+
+            # 为了让路径看起来更自然，随机打通周围的一些格子
+            if random.random() < 0.3:  # 30%的概率
+                for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < self.rows and 0 <= nc < self.cols:
+                        self.grid[nr][nc] = 0
+
+        return True
+
     # ----------------------------------------------------------------
-    # 下面是各类迷宫生成函数（示例）
+    # 下面是各类迷宫生成函数
     # ----------------------------------------------------------------
 
     def generate_traditional_maze(self, ensure_path=True):
@@ -216,9 +285,9 @@ class Maze:
         sc = max(0, min(sc, self.cols - 1))
         carve_path(sr, sc, visited=set())
 
-        # 若 ensure_path 为 True，则桥接保证可达
+        # 若 ensure_path 为 True，则强制保证可达
         if ensure_path and not self.has_valid_path():
-            self.bridge_start_goal()
+            self.force_connect()
 
         # 保证 start/goal 周边有一定空间
         self.carve_space_around(self.start, steps=1)
@@ -288,9 +357,9 @@ class Maze:
             )
             carve_narrow_path(r, c, steps, visited)
 
-        # 桥接
+        # 强制保证可达
         if ensure_path and not self.has_valid_path():
-            self.bridge_start_goal()
+            self.force_connect()
 
         # 保证 start/goal 周边有一定空间
         self.carve_space_around(self.start, steps=1)
@@ -315,7 +384,7 @@ class Maze:
             self.grid.append(row)
 
         if ensure_path and not self.has_valid_path():
-            self.bridge_start_goal()
+            self.force_connect()
 
         # 保证 start/goal 附近通
         self.carve_space_around(self.start, steps=1)
@@ -344,9 +413,9 @@ class Maze:
                     if (rr, cc) not in (self.start, self.goal):
                         self.grid[rr][cc] = 1
 
-        # 如果要求可达，就桥接
+        # 强制保证可达
         if ensure_path and not self.has_valid_path():
-            self.bridge_start_goal()
+            self.force_connect()
 
         # 保证 start/goal 附近通
         self.carve_space_around(self.start, steps=1)
