@@ -13,6 +13,7 @@ class BaseSolver:
         self.frontier_set = set()  # 用于可视化或调试
         self.came_from = {}
         self.path = []
+        self.current_position = None  # 添加当前位置属性
 
     def reset(self):
         """重置算法状态"""
@@ -20,6 +21,7 @@ class BaseSolver:
         self.frontier_set = set()
         self.came_from = {}
         self.path = []
+        self.current_position = None  # 重置当前位置
 
     def build_path(self, current):
         """根据 came_from 中的记录自终点反向构建路径"""
@@ -53,6 +55,7 @@ class DFSSolver(BaseSolver):
             return True  # 栈空，搜索终止，可能找不到目标
 
         current = self.stack.pop()
+        self.current_position = current  # 更新当前位置
         self.frontier_set.discard(current)
 
         if current == self.goal:
@@ -97,6 +100,7 @@ class BFSSolver(BaseSolver):
             return True  # 队列空，说明搜索完毕或无解
 
         current = self.queue.popleft()
+        self.current_position = current  # 更新当前位置
         self.frontier_set.discard(current)
 
         if current == self.goal:
@@ -183,6 +187,7 @@ class BidirectionalBFSSolver(BaseSolver):
             return None
 
         current = queue.popleft()
+        self.current_position = current  # 更新当前位置
         self.frontier_set.discard(current)
         self.visited.add(current)  # 添加到总的已访问集合中
 
@@ -264,6 +269,7 @@ class AStarSolver(BaseSolver):
             return True  # 无路可走
 
         f, g, current = heapq.heappop(self.frontier)
+        self.current_position = current  # 更新当前位置
         self.frontier_set.discard(current)
 
         # 如果当前节点就是目标，则构建路径
@@ -321,6 +327,7 @@ class GreedySolver(BaseSolver):
             return True
 
         _, current = heapq.heappop(self.frontier)
+        self.current_position = current  # 更新当前位置
         self.frontier_set.discard(current)
 
         if current == self.goal:

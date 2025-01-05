@@ -286,6 +286,16 @@ class MazeApp:
                         y2 = y1 + self.cell_size
                         self.draw_path_cell(x1, y1, x2, y2, i, len(self.solver.path))
 
+            # 绘制当前位置
+            if self.solver.current_position:
+                r, c = self.solver.current_position
+                if (r, c) not in (self.maze.start, self.maze.goal):
+                    x1 = c * self.cell_size
+                    y1 = r * self.cell_size
+                    x2 = x1 + self.cell_size
+                    y2 = y1 + self.cell_size
+                    self.draw_current_position(x1, y1, x2, y2)
+
     def draw_cell(self, x1, y1, x2, y2, color, text=None):
         """绘制一个单元格"""
         self.canvas.create_rectangle(
@@ -314,6 +324,31 @@ class MazeApp:
         # 绘制圆角矩形
         self.canvas.create_rectangle(
             x1 + 2, y1 + 2, x2 - 2, y2 - 2, fill=color, outline="", width=0
+        )
+
+    def draw_current_position(self, x1, y1, x2, y2):
+        """绘制当前位置，使用醒目的颜色"""
+        # 使用深紫色作为当前位置的标记
+        self.canvas.create_rectangle(
+            x1 + 2,
+            y1 + 2,
+            x2 - 2,
+            y2 - 2,
+            fill="#4FC3F7",    # 中等深度的蓝色
+            outline="#039BE5",  # 稍深的蓝色边框
+            width=2,
+        )
+        # 添加一个小圆点作为中心标记
+        center_x = (x1 + x2) / 2
+        center_y = (y1 + y2) / 2
+        radius = min(self.cell_size / 6, 5)  # 圆点半径，不超过格子的1/6且最大5像素
+        self.canvas.create_oval(
+            center_x - radius,
+            center_y - radius,
+            center_x + radius,
+            center_y + radius,
+            fill="white",
+            outline="",
         )
 
     def on_generate_maze(self):
