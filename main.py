@@ -170,22 +170,35 @@ class MazeApp:
         speed_frame = ttk.LabelFrame(main_frame, text="动画速度")
         speed_frame.pack(fill=tk.X, padx=5, pady=5)
 
+        speed_control_frame = ttk.Frame(speed_frame)
+        speed_control_frame.pack(fill=tk.X, padx=10, pady=5)
+
         self.speed_var = tk.IntVar(value=80)
         speed_scale = ttk.Scale(
-            speed_frame,
+            speed_control_frame,
             from_=1,
             to=100,
             orient=tk.HORIZONTAL,
             variable=self.speed_var,
+            command=self.on_speed_changed,  # 添加回调函数
         )
-        speed_scale.pack(fill=tk.X, padx=10, pady=5)
+        speed_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        speed_label = ttk.Label(
+        # 添加显示具体数值的标签
+        self.speed_label = ttk.Label(
+            speed_control_frame,
+            text="80",  # 初始值
+            width=3,
+            anchor=tk.E,
+        )
+        self.speed_label.pack(side=tk.LEFT, padx=(5, 0))
+
+        speed_hint = ttk.Label(
             speed_frame,
             text="向右拖动提高速度（1-100）",
             font=self.small_font,
         )
-        speed_label.pack(pady=(0, 5))
+        speed_hint.pack(pady=(0, 5))
 
         # 控制按钮区域
         control_frame = ttk.Frame(main_frame)
@@ -550,6 +563,14 @@ class MazeApp:
 
         # 重新生成迷宫
         self.on_generate_maze()
+
+    def on_speed_changed(self, value):
+        """当速度滑块值改变时调用"""
+        try:
+            # 更新速度标签
+            self.speed_label.config(text=str(int(float(value))))
+        except:
+            pass
 
 
 def main():
