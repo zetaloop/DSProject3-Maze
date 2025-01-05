@@ -32,6 +32,10 @@ class MazeApp:
 
         # 迷宫类型字典
         self.maze_types = {
+            "空白": (
+                "generate_empty_maze",
+                "完全空白的地形，适合纯粹展示算法的搜索过程",
+            ),
             "障碍": (
                 "generate_random_maze",
                 "随机分布的障碍物，适合一般寻路测试",
@@ -46,7 +50,7 @@ class MazeApp:
                 "路径曲折的河流地形",
             ),
         }
-        self.current_maze_type = "迷宫"
+        self.current_maze_type = "空白"
         self.ensure_path = tk.BooleanVar(value=True)  # 添加确保路径存在的变量
 
         # 初始化迷宫对象和求解算法

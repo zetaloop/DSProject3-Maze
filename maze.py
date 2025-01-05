@@ -420,3 +420,10 @@ class Maze:
         # 保证 start/goal 附近通
         self.carve_space_around(self.start, steps=1)
         self.carve_space_around(self.goal, steps=1)
+
+    def generate_empty_maze(self, ensure_path=True):
+        """生成一个完全空白的迷宫，用于纯粹展示算法的搜索过程"""
+        # 将所有格子设为0（可通过）
+        self.grid = [[0] * self.cols for _ in range(self.rows)]
+        # 空白迷宫不需要确保路径，因为所有格子都是通的
+        return True
