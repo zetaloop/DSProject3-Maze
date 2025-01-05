@@ -349,6 +349,7 @@ class GreedySolver(BaseSolver):
         for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
             nr, nc = current[0] + dr, current[1] + dc
             if self.maze.is_valid(nr, nc) and (nr, nc) not in self.visited:
+                self.visited.add((nr, nc))  # 将新节点加入 visited
                 h_val = self.heuristic((nr, nc), self.goal)
                 heapq.heappush(self.frontier, (h_val, (nr, nc)))
                 self.frontier_set.add((nr, nc))
