@@ -359,71 +359,7 @@ class AStarSolver(BaseSolver):
 
 
 # ---------------------------------------------------------------------------
-# 6. Iterative Deepening A* (IDA*)
-# ---------------------------------------------------------------------------
-class IDAStarSolver(BaseSolver):
-    """
-    Iterative Deepening A* - 通过迭代加深来减少内存使用，
-    特别适合内存受限的迷宫环境。
-    """
-
-    def __init__(self, maze):
-        super().__init__(maze)
-        self.threshold = self.heuristic(self.start, self.goal)
-        self.path_stack = []
-        self.min_cost = float("inf")
-
-    def reset(self):
-        super().reset()
-        self.threshold = self.heuristic(self.start, self.goal)
-        self.path_stack = [self.start]
-        self.min_cost = float("inf")
-
-    def heuristic(self, pos1, pos2):
-        """曼哈顿距离"""
-        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
-
-    def search(self, current, g):
-        f = g + self.heuristic(current, self.goal)
-        if f > self.threshold:
-            self.min_cost = min(self.min_cost, f)
-            return False
-
-        self.current_position = current
-        self.frontier_set.discard(current)
-
-        if current == self.goal:
-            self.path = list(self.path_stack)
-            return True
-
-        self.visited.add(current)
-
-        for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            nr, nc = current[0] + dr, current[1] + dc
-            if self.maze.is_valid(nr, nc) and (nr, nc) not in self.visited:
-                self.path_stack.append((nr, nc))
-                self.frontier_set.add((nr, nc))
-                self.came_from[(nr, nc)] = current
-                if self.search((nr, nc), g + 1):
-                    return True
-                self.path_stack.pop()
-                self.frontier_set.discard((nr, nc))
-
-        return False
-
-    def step(self):
-        if self.search(self.start, 0):
-            return True
-        self.threshold = self.min_cost
-        self.min_cost = float("inf")
-        self.visited.clear()
-        self.frontier_set.clear()
-        self.path_stack = [self.start]
-        return False
-
-
-# ---------------------------------------------------------------------------
-# 7. Bidirectional A*
+# 6. Bidirectional A*
 # ---------------------------------------------------------------------------
 class BidirectionalAStarSolver(BaseSolver):
     """
@@ -437,6 +373,8 @@ class BidirectionalAStarSolver(BaseSolver):
         self.goal_frontier = []
         self.start_dist = {}
         self.goal_dist = {}
+        self.start_came_from = {}  # 分别存储两个方向的 came_from
+        self.goal_came_from = {}
         self.meeting_point = None
         self.reset()
 
@@ -456,6 +394,8 @@ class BidirectionalAStarSolver(BaseSolver):
         self.goal_dist[self.goal] = 0
         self.start_frontier = [(self.heuristic(self.start, self.goal), 0, self.start)]
         self.goal_frontier = [(self.heuristic(self.goal, self.start), 0, self.goal)]
+        self.start_came_from = {}
+        self.goal_came_from = {}
         self.frontier_set = {self.start, self.goal}
         self.meeting_point = None
 
@@ -468,34 +408,26 @@ class BidirectionalAStarSolver(BaseSolver):
         # 从 meeting_point 往回走到 start
         path_from_start = []
         cur = self.meeting_point
-        while cur in self.came_from:
+        while cur in self.start_came_from:
             path_from_start.append(cur)
-            cur = self.came_from[cur]
+            cur = self.start_came_from[cur]
         path_from_start.append(self.start)
         path_from_start.reverse()
 
         # 从 meeting_point 往前走到 goal
         path_to_goal = []
         cur = self.meeting_point
-        while cur != self.goal:
-            for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-                nr, nc = cur[0] + dr, cur[1] + dc
-                if (nr, nc) in self.goal_dist and self.goal_dist[
-                    (nr, nc)
-                ] == self.goal_dist[cur] - 1:
-                    path_to_goal.append(cur)
-                    cur = (nr, nc)
-                    break
-        path_to_goal.append(self.goal)
+        while cur in self.goal_came_from:
+            cur = self.goal_came_from[cur]
+            path_to_goal.append(cur)
 
-        # 合并路径
+        # 合并路径，注意不要重复添加 meeting_point
         self.path = path_from_start + path_to_goal
 
     def step(self):
         if not self.start_frontier and not self.goal_frontier:
-            return True
+            return True  # 无解
 
-        # 交替扩展两端
         if len(self.start_frontier) <= len(self.goal_frontier):
             # 扩展起点端
             if not self.start_frontier:
@@ -505,15 +437,17 @@ class BidirectionalAStarSolver(BaseSolver):
             self.current_position = current
             self.frontier_set.discard(current)
 
-            if current in self.goal_dist:
+            # 如果当前节点被终点方向访问，表示相遇
+            if current in self.goal_dist and self.goal_dist[current] != float("inf"):
                 self.meeting_point = current
                 self.build_bidirectional_path()
                 return True
 
+            # 如果该节点的 g 值不是最优，跳过
             if g > self.start_dist[current]:
                 return False
 
-            self.visited.add(current)
+            self.visited.add(current)  # 记录已访问的节点
 
             for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
                 nr, nc = current[0] + dr, current[1] + dc
@@ -521,7 +455,7 @@ class BidirectionalAStarSolver(BaseSolver):
                     new_g = g + 1
                     if new_g < self.start_dist[(nr, nc)]:
                         self.start_dist[(nr, nc)] = new_g
-                        self.came_from[(nr, nc)] = current
+                        self.start_came_from[(nr, nc)] = current
                         f_new = new_g + self.heuristic((nr, nc), self.goal)
                         heapq.heappush(self.start_frontier, (f_new, new_g, (nr, nc)))
                         self.frontier_set.add((nr, nc))
@@ -534,15 +468,17 @@ class BidirectionalAStarSolver(BaseSolver):
             self.current_position = current
             self.frontier_set.discard(current)
 
-            if current in self.start_dist:
+            # 如果当前节点被起点方向访问，表示相遇
+            if current in self.start_dist and self.start_dist[current] != float("inf"):
                 self.meeting_point = current
                 self.build_bidirectional_path()
                 return True
 
+            # 如果该节点的 g 值不是最优，跳过
             if g > self.goal_dist[current]:
                 return False
 
-            self.visited.add(current)
+            self.visited.add(current)  # 记录已访问的节点
 
             for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
                 nr, nc = current[0] + dr, current[1] + dc
@@ -550,7 +486,7 @@ class BidirectionalAStarSolver(BaseSolver):
                     new_g = g + 1
                     if new_g < self.goal_dist[(nr, nc)]:
                         self.goal_dist[(nr, nc)] = new_g
-                        self.came_from[(nr, nc)] = current
+                        self.goal_came_from[(nr, nc)] = current
                         f_new = new_g + self.heuristic((nr, nc), self.start)
                         heapq.heappush(self.goal_frontier, (f_new, new_g, (nr, nc)))
                         self.frontier_set.add((nr, nc))

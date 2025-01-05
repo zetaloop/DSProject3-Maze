@@ -11,7 +11,6 @@ from solver import (
     BidirectionalBFSSolver,
     GreedySolver,
     AStarSolver,
-    IDAStarSolver,
     BidirectionalAStarSolver,
 )
 
@@ -64,7 +63,6 @@ class MazeApp:
             "贪心搜索": GreedySolver,
             "A*搜索": AStarSolver,
             "双向A*搜索": BidirectionalAStarSolver,
-            "IDA*搜索": IDAStarSolver,
         }
 
         # 算法说明
@@ -75,7 +73,6 @@ class MazeApp:
             "贪心搜索": "仅使用启发式估计选择下一步，速度快但不保证最短路径",
             "A*搜索": "结合实际代价和启发式估计，通常能找到最短路径",
             "双向A*搜索": "从起点和终点同时搜索，特别适合起点和终点距离较远的迷宫环境",
-            "IDA*搜索": "迭代加深A*，结合深度优先搜索和A*，适用于深度较大的迷宫",
         }
 
         self.current_algorithm = "深度优先搜索 (DFS)"
