@@ -170,7 +170,7 @@ class MazeApp:
         speed_frame = ttk.LabelFrame(main_frame, text="动画速度")
         speed_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.speed_var = tk.IntVar(value=70)
+        self.speed_var = tk.IntVar(value=80)
         speed_scale = ttk.Scale(
             speed_frame,
             from_=1,
@@ -274,37 +274,93 @@ class MazeApp:
                 else:
                     self.draw_cell(x1, y1, x2, y2, "#FFFFFF")
 
-        # 绘制搜索过程
-        if self.solver:
-            # 绘制已访问节点
-            for r, c in self.solver.visited:
+        # 存储上一次的状态，用于增量更新
+        self._last_visited = set()
+        self._last_frontier = set()
+        self._last_path = []
+        self._last_position = None
+
+    def update_maze_view(self):
+        """增量更新迷宫视图"""
+        if not self.solver:
+            return
+
+        # 更新已访问节点
+        new_visited = self.solver.visited - self._last_visited
+        for r, c in new_visited:
+            if (r, c) not in (self.maze.start, self.maze.goal):
+                x1 = c * self.cell_size
+                y1 = r * self.cell_size
+                x2 = x1 + self.cell_size
+                y2 = y1 + self.cell_size
+                self.draw_cell(x1, y1, x2, y2, "#E1F5FE")  # 淡蓝色
+
+        # 更新边界节点
+        old_frontier = self._last_frontier - self.solver.frontier_set
+        new_frontier = self.solver.frontier_set - self._last_frontier
+
+        # 清除旧的边界节点（恢复为白色或已访问的颜色）
+        for r, c in old_frontier:
+            if (r, c) not in (self.maze.start, self.maze.goal):
+                x1 = c * self.cell_size
+                y1 = r * self.cell_size
+                x2 = x1 + self.cell_size
+                y2 = y1 + self.cell_size
+                color = "#E1F5FE" if (r, c) in self.solver.visited else "#FFFFFF"
+                self.draw_cell(x1, y1, x2, y2, color)
+
+        # 绘制新的边界节点
+        for r, c in new_frontier:
+            if (r, c) not in (self.maze.start, self.maze.goal):
+                x1 = c * self.cell_size
+                y1 = r * self.cell_size
+                x2 = x1 + self.cell_size
+                y2 = y1 + self.cell_size
+                self.draw_cell(x1, y1, x2, y2, "#FFF3E0")  # 淡橙色
+
+        # 更新路径
+        if self.solver.path != self._last_path:
+            # 清除旧路径
+            for r, c in self._last_path:
                 if (r, c) not in (self.maze.start, self.maze.goal):
                     x1 = c * self.cell_size
                     y1 = r * self.cell_size
                     x2 = x1 + self.cell_size
                     y2 = y1 + self.cell_size
-                    self.draw_cell(x1, y1, x2, y2, "#E1F5FE")  # 淡蓝色
+                    color = "#E1F5FE" if (r, c) in self.solver.visited else "#FFFFFF"
+                    self.draw_cell(x1, y1, x2, y2, color)
 
-            # 绘制边界节点
-            for r, c in self.solver.frontier_set:
+            # 绘制新路径
+            for i, (r, c) in enumerate(self.solver.path):
                 if (r, c) not in (self.maze.start, self.maze.goal):
                     x1 = c * self.cell_size
                     y1 = r * self.cell_size
                     x2 = x1 + self.cell_size
                     y2 = y1 + self.cell_size
-                    self.draw_cell(x1, y1, x2, y2, "#FFF3E0")  # 淡橙色
+                    self.draw_path_cell(x1, y1, x2, y2, i, len(self.solver.path))
 
-            # 绘制路径
-            if self.solver.path:
-                for i, (r, c) in enumerate(self.solver.path):
-                    if (r, c) not in (self.maze.start, self.maze.goal):
-                        x1 = c * self.cell_size
-                        y1 = r * self.cell_size
-                        x2 = x1 + self.cell_size
-                        y2 = y1 + self.cell_size
+        # 更新当前位置
+        if self.solver.current_position != self._last_position:
+            # 清除旧的当前位置
+            if self._last_position:
+                r, c = self._last_position
+                if (r, c) not in (self.maze.start, self.maze.goal):
+                    x1 = c * self.cell_size
+                    y1 = r * self.cell_size
+                    x2 = x1 + self.cell_size
+                    y2 = y1 + self.cell_size
+                    # 根据节点状态决定颜色
+                    if (r, c) in self.solver.path:
+                        i = self.solver.path.index((r, c))
                         self.draw_path_cell(x1, y1, x2, y2, i, len(self.solver.path))
+                    elif (r, c) in self.solver.frontier_set:
+                        self.draw_cell(x1, y1, x2, y2, "#FFF3E0")
+                    elif (r, c) in self.solver.visited:
+                        self.draw_cell(x1, y1, x2, y2, "#E1F5FE")
+                    else:
+                        self.draw_cell(x1, y1, x2, y2, "#FFFFFF")
 
-            # 绘制当前位置
+            # 绘制新的当前位置
             if self.solver.current_position:
                 r, c = self.solver.current_position
                 if (r, c) not in (self.maze.start, self.maze.goal):
@@ -313,6 +369,12 @@ class MazeApp:
                     x2 = x1 + self.cell_size
                     y2 = y1 + self.cell_size
                     self.draw_current_position(x1, y1, x2, y2)
+
+        # 更新状态
+        self._last_visited = self.solver.visited.copy()
+        self._last_frontier = self.solver.frontier_set.copy()
+        self._last_path = self.solver.path.copy() if self.solver.path else []
+        self._last_position = self.solver.current_position
 
     def draw_cell(self, x1, y1, x2, y2, color, text=None):
         """绘制一个单元格"""
@@ -393,6 +455,8 @@ class MazeApp:
 
         self.is_solving = True
         self.solver.reset()
+        # 重新绘制整个迷宫以清除之前的状态
+        self.draw_maze()
         self.solve_step()
 
     def solve_step(self):
@@ -400,7 +464,7 @@ class MazeApp:
         逐步执行求解算法，并在界面上刷新状态
         """
         done = self.solver.step()
-        self.draw_maze()
+        self.update_maze_view()  # 使用增量更新替代完全重绘
 
         if done:
             self.is_solving = False
@@ -411,8 +475,11 @@ class MazeApp:
             return
 
         # 未完成，继续下一步
-        # 速度值反转：100 -> 快速（短延迟）, 1 -> 慢速（长延迟）
-        delay = int(1000 / self.speed_var.get())  # 将1-100的值转换为延迟时间
+        speed = self.speed_var.get()
+        if speed >= 95:  # 最快速度时几乎无延迟
+            delay = 1
+        else:
+            delay = int(1000 * (1.0 - speed / 100.0) ** 2)  # 使用指数衰减
         self.after_id = self.root.after(delay, self.solve_step)
 
     def on_reset(self):
