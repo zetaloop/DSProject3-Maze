@@ -30,30 +30,49 @@ class MazeApp:
         self.default_font = ("等线", 10)
         self.small_font = ("等线", 8)
 
+        # 迷宫类型字典
+        self.maze_types = {
+            "障碍": (
+                "generate_random_maze",
+                "随机分布的障碍物，适合一般寻路测试",
+            ),
+            "迷宫": (
+                "generate_traditional_maze",
+                "经典的迷宫布局",
+            ),
+            "山丘": ("generate_block_maze", "大块的障碍物分布，模拟真实山丘地形"),
+            "河流": (
+                "generate_river_maze",
+                "路径曲折的河流地形",
+            ),
+        }
+        self.current_maze_type = "迷宫"
+        self.ensure_path = tk.BooleanVar(value=True)  # 添加确保路径存在的变量
+
         # 初始化迷宫对象和求解算法
-        self.maze_size = 20  # 可以根据需要调整迷宫大小
+        self.maze_size = 19  # 修改为奇数，这样传统迷宫算法可以正确工作
         self.maze = Maze(self.maze_size, self.maze_size)
-        self.cell_size = 25
+        self.cell_size = 30
 
         # 算法字典
         self.solver_classes = {
-            "A*算法": AStarSolver,
             "深度优先搜索 (DFS)": DFSSolver,
             "广度优先搜索 (BFS)": BFSSolver,
             "双向广度优先搜索": BidirectionalBFSSolver,
+            "A*算法": AStarSolver,
             "贪心最佳优先搜索": GreedySolver,
         }
 
         # 算法说明
         self.algorithm_descriptions = {
-            "A*算法": "结合实际代价和启发式估计，通常能找到最短路径",
             "深度优先搜索 (DFS)": "递归探索一条路径直到无法继续，内存占用小但不保证最短路径",
             "广度优先搜索 (BFS)": "按层次扩展搜索，在无权图中保证找到最短路径",
             "双向广度优先搜索": "同时从起点和终点搜索，在大型迷宫中通常更高效",
+            "A*算法": "结合实际代价和启发式估计，通常能找到最短路径",
             "贪心最佳优先搜索": "仅使用启发式估计选择下一步，速度快但不保证最短路径",
         }
 
-        self.current_algorithm = "A*算法"
+        self.current_algorithm = "深度优先搜索 (DFS)"
         self.solver = self.solver_classes[self.current_algorithm](self.maze)
         self.is_solving = False
         self.after_id = None
@@ -69,6 +88,44 @@ class MazeApp:
         # 创建主控制框架
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # 迷宫类型选择区域
+        maze_frame = ttk.LabelFrame(main_frame, text="迷宫类型")
+        maze_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        maze_combo_frame = ttk.Frame(maze_frame)
+        maze_combo_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Label(maze_combo_frame, text="选择地形：").pack(side=tk.LEFT)
+        self.maze_type_var = tk.StringVar(value=self.current_maze_type)
+        maze_combo = ttk.Combobox(
+            maze_combo_frame,
+            textvariable=self.maze_type_var,
+            values=list(self.maze_types.keys()),
+            state="readonly",
+            width=25,
+        )
+        maze_combo.pack(side=tk.LEFT, padx=5)
+        maze_combo.bind("<<ComboboxSelected>>", self.on_maze_type_changed)
+
+        # 添加确保路径存在的开关
+        ensure_path_check = ttk.Checkbutton(
+            maze_combo_frame,
+            text="确保可达终点",
+            variable=self.ensure_path,
+            command=self.on_ensure_path_changed,
+        )
+        ensure_path_check.pack(side=tk.RIGHT, padx=5)
+
+        # 迷宫类型描述标签
+        self.maze_description_label = ttk.Label(
+            maze_frame,
+            text=self.maze_types[self.current_maze_type][1],
+            wraplength=600,
+            justify=tk.LEFT,
+            font=self.small_font,
+        )
+        self.maze_description_label.pack(fill=tk.X, padx=5, pady=5)
 
         # 算法选择区域
         algorithm_frame = ttk.LabelFrame(main_frame, text="算法选择")
@@ -157,41 +214,23 @@ class MazeApp:
         theme_button.configure(style="Custom.TButton")
 
     def create_canvas(self):
-        """
-        创建绘制迷宫的画布
-        """
-        # 创建带滚动条的画布框架
+        """创建绘制迷宫的画布"""
+        # 创建画布框架
         canvas_frame = ttk.Frame(self.root)
         canvas_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-        # 添加滚动条
-        h_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL)
-        v_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
 
         # 计算画布大小
         width = self.maze.cols * self.cell_size
         height = self.maze.rows * self.cell_size
 
+        # 创建画布
         self.canvas = tk.Canvas(
             canvas_frame,
-            width=min(width, 800),  # 限制最大显示尺寸
-            height=min(height, 600),
+            width=width,
+            height=height,
             bg="white",
-            xscrollcommand=h_scrollbar.set,
-            yscrollcommand=v_scrollbar.set,
         )
-
-        # 配置滚动条
-        h_scrollbar.config(command=self.canvas.xview)
-        v_scrollbar.config(command=self.canvas.yview)
-
-        # 放置组件
-        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        # 设置画布滚动区域
-        self.canvas.config(scrollregion=(0, 0, width, height))
 
         self.draw_maze()
 
@@ -278,11 +317,17 @@ class MazeApp:
         )
 
     def on_generate_maze(self):
-        """
-        点击"生成新迷宫"按钮后回调，重新生成迷宫
-        """
+        """点击"生成新迷宫"按钮后回调，重新生成迷宫"""
         self.stop_solving()
-        self.maze.generate_random_maze()
+        # 根据当前选择的迷宫类型生成迷宫
+        maze_generator = getattr(self.maze, self.maze_types[self.current_maze_type][0])
+
+        # 对于传统迷宫，不传入ensure_path参数（因为它总是有路径的）
+        if self.current_maze_type == "迷宫":
+            maze_generator()
+        else:
+            maze_generator(ensure_path=self.ensure_path.get())
+
         self.solver = self.solver_classes[self.current_algorithm](self.maze)
         self.draw_maze()
 
@@ -351,6 +396,19 @@ class MazeApp:
             text=self.algorithm_descriptions[self.current_algorithm]
         )
         self.on_reset()  # 重置当前状态
+
+    def on_maze_type_changed(self, event):
+        """当选择的迷宫类型改变时调用"""
+        self.current_maze_type = self.maze_type_var.get()
+        # 更新迷宫类型描述
+        self.maze_description_label.config(
+            text=self.maze_types[self.current_maze_type][1]
+        )
+        self.on_generate_maze()  # 重新生成迷宫
+
+    def on_ensure_path_changed(self):
+        """当确保路径存在的开关状态改变时调用"""
+        self.on_generate_maze()  # 重新生成迷宫
 
 
 def main():
