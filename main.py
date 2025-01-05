@@ -30,6 +30,11 @@ class MazeApp:
         self.default_font = ("等线", 10)
         self.small_font = ("等线", 8)
 
+        # 双倍大小模式
+        self.double_size_mode = tk.BooleanVar(value=False)
+        self.base_maze_size = 19  # 基础迷宫大小
+        self.base_cell_size = 30  # 基础格子大小
+
         # 迷宫类型字典
         self.maze_types = {
             "空白": (
@@ -54,9 +59,9 @@ class MazeApp:
         self.ensure_path = tk.BooleanVar(value=True)  # 添加确保路径存在的变量
 
         # 初始化迷宫对象和求解算法
-        self.maze_size = 19  # 修改为奇数，这样传统迷宫算法可以正确工作
+        self.maze_size = self.base_maze_size  # 修改为奇数，这样传统迷宫算法可以正确工作
         self.maze = Maze(self.maze_size, self.maze_size)
-        self.cell_size = 30
+        self.cell_size = self.base_cell_size
 
         # 算法字典
         self.solver_classes = {
@@ -209,6 +214,15 @@ class MazeApp:
         # 右侧按钮组
         right_button_frame = ttk.Frame(control_frame)
         right_button_frame.pack(side=tk.RIGHT)
+
+        # 双倍大小模式切换按钮
+        double_size_check = ttk.Checkbutton(
+            right_button_frame,
+            text="双倍大小",
+            variable=self.double_size_mode,
+            command=self.on_size_mode_changed,
+        )
+        double_size_check.pack(side=tk.RIGHT, padx=5)
 
         # 主题切换按钮
         theme_button = ttk.Button(
@@ -448,6 +462,27 @@ class MazeApp:
     def on_ensure_path_changed(self):
         """当确保路径存在的开关状态改变时调用"""
         self.on_generate_maze()  # 重新生成迷宫
+
+    def on_size_mode_changed(self):
+        """当双倍大小模式改变时调用"""
+        if self.double_size_mode.get():
+            self.maze_size = self.base_maze_size * 2 + 1  # 39
+            self.cell_size = self.base_cell_size // 2  # 15
+        else:
+            self.maze_size = self.base_maze_size  # 19
+            self.cell_size = self.base_cell_size  # 30
+
+        # 重新创建迷宫
+        self.maze = Maze(self.maze_size, self.maze_size)
+        self.solver = self.solver_classes[self.current_algorithm](self.maze)
+
+        # 重新调整画布大小
+        width = self.maze.cols * self.cell_size
+        height = self.maze.rows * self.cell_size
+        self.canvas.config(width=width, height=height)
+
+        # 重新生成迷宫
+        self.on_generate_maze()
 
 
 def main():
