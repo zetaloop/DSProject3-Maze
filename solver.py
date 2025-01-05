@@ -142,6 +142,7 @@ class BidirectionalBFSSolver(BaseSolver):
         self.start_came_from = {}
         self.goal_came_from = {}
         self.meeting_point = None
+        self.is_expanding_start = True  # 添加标记来指示当前是否在扩展起点
         self.reset()
 
     def reset(self):
@@ -153,6 +154,7 @@ class BidirectionalBFSSolver(BaseSolver):
         self.start_came_from = {}
         self.goal_came_from = {}
         self.meeting_point = None
+        self.is_expanding_start = True  # 重置为从起点开始
         # 用于可视化的 frontier_set，可以先把起点、终点都放进去
         self.frontier_set = {self.start, self.goal}
 
@@ -208,26 +210,33 @@ class BidirectionalBFSSolver(BaseSolver):
         if not self.start_queue and not self.goal_queue:
             return True  # 均空，搜索结束
 
-        # 扩展 start 端
-        meeting = self.expand_front(
-            self.start_queue,
-            self.start_visited,
-            self.goal_visited,
-            self.start_came_from,
-        )
-        if meeting is not None:
-            self.meeting_point = meeting
-            self.build_bidirectional_path()
-            return True
-
-        # 扩展 goal 端
-        meeting = self.expand_front(
-            self.goal_queue, self.goal_visited, self.start_visited, self.goal_came_from
-        )
-        if meeting is not None:
-            self.meeting_point = meeting
-            self.build_bidirectional_path()
-            return True
+        # 交替扩展两端
+        if self.is_expanding_start:
+            if self.start_queue:  # 如果起点队列非空，则扩展起点
+                meeting = self.expand_front(
+                    self.start_queue,
+                    self.start_visited,
+                    self.goal_visited,
+                    self.start_came_from,
+                )
+                if meeting is not None:
+                    self.meeting_point = meeting
+                    self.build_bidirectional_path()
+                    return True
+            self.is_expanding_start = False  # 切换到终点
+        else:
+            if self.goal_queue:  # 如果终点队列非空，则扩展终点
+                meeting = self.expand_front(
+                    self.goal_queue,
+                    self.goal_visited,
+                    self.start_visited,
+                    self.goal_came_from,
+                )
+                if meeting is not None:
+                    self.meeting_point = meeting
+                    self.build_bidirectional_path()
+                    return True
+            self.is_expanding_start = True  # 切换到起点
 
         return False
 
