@@ -192,7 +192,7 @@ class Maze:
                 nr, nc = r + 2 * dr, c + 2 * dc
                 if valid_cell(nr, nc) and (nr, nc) not in visited:
                     # 为了可能形成不连通区域，加入一个“随机放弃 carve”的机制
-                    if random.random() < 0.5 or ensure_path:
+                    if random.random() < 0.9 or ensure_path:
                         # 打通中间墙
                         self.grid[r + dr][c + dc] = 0
                         carve_path(nr, nc, visited)
