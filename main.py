@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import sv_ttk
+from tkinter import messagebox
 
 from maze import Maze
 from solver import AStarSolver
@@ -11,7 +12,8 @@ class MazeApp:
         self.root = root
         self.root.title("迷宫求解可视化演示（A*）")
 
-        # 使用sv_ttk主题
+        # 主题设置
+        self.is_dark = True
         sv_ttk.use_dark_theme()
 
         # 初始化界面布局
@@ -33,58 +35,103 @@ class MazeApp:
         """
         创建顶部控制区域、速度调节、按钮等
         """
-        control_frame = ttk.Frame(self.root)
-        control_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+        # 创建主控制框架
+        main_frame = ttk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # 生成迷宫按钮
+        # 上方按钮区域
+        control_frame = ttk.Frame(main_frame)
+        control_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
+
+        # 左侧按钮组
+        left_button_frame = ttk.Frame(control_frame)
+        left_button_frame.pack(side=tk.LEFT)
+
         generate_button = ttk.Button(
-            control_frame, text="生成新迷宫", command=self.on_generate_maze
+            left_button_frame, text="生成新迷宫", command=self.on_generate_maze
         )
         generate_button.pack(side=tk.LEFT, padx=5)
 
-        # 开始求解按钮
         self.start_button = ttk.Button(
-            control_frame, text="开始求解", command=self.on_start_solving
+            left_button_frame, text="开始求解", command=self.on_start_solving
         )
         self.start_button.pack(side=tk.LEFT, padx=5)
 
-        # 重置按钮
-        reset_button = ttk.Button(control_frame, text="重置", command=self.on_reset)
+        reset_button = ttk.Button(left_button_frame, text="重置", command=self.on_reset)
         reset_button.pack(side=tk.LEFT, padx=5)
 
-        # 速度调节
-        speed_label = ttk.Label(control_frame, text="可视化速度(ms):")
-        speed_label.pack(side=tk.LEFT, padx=5)
+        # 右侧控制组
+        right_control_frame = ttk.Frame(control_frame)
+        right_control_frame.pack(side=tk.RIGHT)
 
-        self.speed_var = tk.IntVar(value=200)
+        # 主题切换按钮
+        theme_button = ttk.Button(
+            right_control_frame, text="切换主题", command=self.toggle_theme
+        )
+        theme_button.pack(side=tk.RIGHT, padx=5)
+
+        # 速度控制组
+        speed_frame = ttk.LabelFrame(main_frame, text="动画速度")
+        speed_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.speed_var = tk.IntVar(value=70)  # 修改默认值
         speed_scale = ttk.Scale(
-            control_frame,
-            from_=50,
-            to=1000,
+            speed_frame,
+            from_=1,
+            to=100,
             orient=tk.HORIZONTAL,
-            command=self.on_speed_change,
             variable=self.speed_var,
         )
-        speed_scale.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        speed_scale.pack(fill=tk.X, padx=10, pady=5)
+
+        # 添加速度说明标签
+        speed_label = ttk.Label(speed_frame, text="向右拖动提高速度", font=("", 8))
+        speed_label.pack(pady=(0, 5))
 
     def create_canvas(self):
         """
         创建绘制迷宫的画布
         """
+        # 创建带滚动条的画布框架
+        canvas_frame = ttk.Frame(self.root)
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # 添加滚动条
+        h_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.HORIZONTAL)
+        v_scrollbar = ttk.Scrollbar(canvas_frame, orient=tk.VERTICAL)
+
+        # 计算画布大小
         width = self.maze.cols * self.cell_size
         height = self.maze.rows * self.cell_size
 
-        self.canvas = tk.Canvas(self.root, width=width, height=height, bg="white")
-        self.canvas.pack(side=tk.TOP, padx=10, pady=10)
+        self.canvas = tk.Canvas(
+            canvas_frame,
+            width=min(width, 800),  # 限制最大显示尺寸
+            height=min(height, 600),
+            bg="white",
+            xscrollcommand=h_scrollbar.set,
+            yscrollcommand=v_scrollbar.set,
+        )
+
+        # 配置滚动条
+        h_scrollbar.config(command=self.canvas.xview)
+        v_scrollbar.config(command=self.canvas.yview)
+
+        # 放置组件
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # 设置画布滚动区域
+        self.canvas.config(scrollregion=(0, 0, width, height))
 
         self.draw_maze()
 
     def draw_maze(self):
-        """
-        根据 maze 对象的 wall 信息绘制迷宫格子、起点终点等
-        """
-        self.canvas.delete("all")  # 清空画布
+        """绘制迷宫"""
+        self.canvas.delete("all")
 
+        # 绘制背景网格
         for r in range(self.maze.rows):
             for c in range(self.maze.cols):
                 x1 = c * self.cell_size
@@ -92,48 +139,75 @@ class MazeApp:
                 x2 = x1 + self.cell_size
                 y2 = y1 + self.cell_size
 
+                # 绘制单元格
                 if (r, c) == self.maze.start:
-                    color = "green"
+                    self.draw_cell(x1, y1, x2, y2, "#00FF66", "起点")
                 elif (r, c) == self.maze.goal:
-                    color = "red"
+                    self.draw_cell(x1, y1, x2, y2, "#FF0066", "终点")
                 elif self.maze.grid[r][c] == 1:
-                    color = "black"  # 墙体
+                    self.draw_wall(x1, y1, x2, y2)
                 else:
-                    color = "white"
+                    self.draw_cell(x1, y1, x2, y2, "#FFFFFF")
 
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="gray")
-
-        # 绘制搜索过程中标记的颜色
+        # 绘制搜索过程
         if self.solver:
+            # 绘制已访问节点
             for r, c in self.solver.visited:
                 if (r, c) not in (self.maze.start, self.maze.goal):
                     x1 = c * self.cell_size
                     y1 = r * self.cell_size
                     x2 = x1 + self.cell_size
                     y2 = y1 + self.cell_size
-                    self.canvas.create_rectangle(
-                        x1, y1, x2, y2, fill="#87CEFA", outline="gray"  # 浅蓝色
-                    )
+                    self.draw_cell(x1, y1, x2, y2, "#E1F5FE")  # 淡蓝色
+
+            # 绘制边界节点
             for r, c in self.solver.frontier_set:
                 if (r, c) not in (self.maze.start, self.maze.goal):
                     x1 = c * self.cell_size
                     y1 = r * self.cell_size
                     x2 = x1 + self.cell_size
                     y2 = y1 + self.cell_size
-                    self.canvas.create_rectangle(
-                        x1, y1, x2, y2, fill="#F0E68C", outline="gray"  # 浅卡其色
-                    )
+                    self.draw_cell(x1, y1, x2, y2, "#FFF3E0")  # 淡橙色
 
-            # 最终找到的路径
-            for r, c in self.solver.path:
-                if (r, c) not in (self.maze.start, self.maze.goal):
-                    x1 = c * self.cell_size
-                    y1 = r * self.cell_size
-                    x2 = x1 + self.cell_size
-                    y2 = y1 + self.cell_size
-                    self.canvas.create_rectangle(
-                        x1, y1, x2, y2, fill="#FFA500", outline="gray"  # 橙色
-                    )
+            # 绘制路径
+            if self.solver.path:
+                for i, (r, c) in enumerate(self.solver.path):
+                    if (r, c) not in (self.maze.start, self.maze.goal):
+                        x1 = c * self.cell_size
+                        y1 = r * self.cell_size
+                        x2 = x1 + self.cell_size
+                        y2 = y1 + self.cell_size
+                        self.draw_path_cell(x1, y1, x2, y2, i, len(self.solver.path))
+
+    def draw_cell(self, x1, y1, x2, y2, color, text=None):
+        """绘制一个单元格"""
+        self.canvas.create_rectangle(
+            x1, y1, x2, y2, fill=color, outline="#E0E0E0", width=1
+        )
+        if text:
+            self.canvas.create_text(
+                (x1 + x2) / 2, (y1 + y2) / 2, text=text, font=("Arial", 8)
+            )
+
+    def draw_wall(self, x1, y1, x2, y2):
+        """绘制墙体"""
+        # 使用渐变色效果
+        self.canvas.create_rectangle(
+            x1, y1, x2, y2, fill="#424242", outline="#212121", width=1
+        )
+
+    def draw_path_cell(self, x1, y1, x2, y2, index, total):
+        """绘制路径单元格，使用渐变色效果"""
+        # 计算渐变色 - 从绿色渐变到红色
+        progress = index / total
+        r = int(255 * progress)  # 红色从0渐变到255
+        g = int(255 * (1 - progress))  # 绿色从255渐变到0
+        color = f"#{r:02x}{g:02x}66"
+
+        # 绘制圆角矩形
+        self.canvas.create_rectangle(
+            x1 + 2, y1 + 2, x2 - 2, y2 - 2, fill=color, outline="", width=0
+        )
 
     def on_generate_maze(self):
         """
@@ -164,10 +238,16 @@ class MazeApp:
 
         if done:
             self.is_solving = False
+            if self.solver.path:  # 如果找到路径
+                messagebox.showinfo("完成", "已找到最短路径！")
+            else:
+                messagebox.showwarning("提示", "无法找到可行路径。")
             return
 
         # 未完成，继续下一步
-        self.after_id = self.root.after(self.speed_var.get(), self.solve_step)
+        # 速度值反转：100 -> 快速（短延迟）, 1 -> 慢速（长延迟）
+        delay = int(1000 / self.speed_var.get())  # 将1-100的值转换为延迟时间
+        self.after_id = self.root.after(delay, self.solve_step)
 
     def on_reset(self):
         """
@@ -177,11 +257,13 @@ class MazeApp:
         self.solver = AStarSolver(self.maze)
         self.draw_maze()
 
-    def on_speed_change(self, event):
-        """
-        速度调节回调
-        """
-        pass  # self.speed_var.get() 即可取到当前滑动条值
+    def toggle_theme(self):
+        """切换明暗主题"""
+        if self.is_dark:
+            sv_ttk.use_light_theme()
+        else:
+            sv_ttk.use_dark_theme()
+        self.is_dark = not self.is_dark
 
     def stop_solving(self):
         """
