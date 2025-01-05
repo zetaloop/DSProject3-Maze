@@ -3,20 +3,33 @@ from collections import deque
 
 
 class Maze:
-    def __init__(self, rows, cols):
+    def __init__(self, rows, cols, start=(0, 0), goal=None):
+        """
+        rows, cols: 迷宫的行列数
+        start: 起点坐标
+        goal:  终点坐标，不指定则默认为 (rows-1, cols-1)
+        """
         self.rows = rows
         self.cols = cols
+        self.start = start
+        if goal is None:
+            goal = (rows - 1, cols - 1)
+        self.goal = goal
+
+        # 初始地图全 0（全通），后续每个算法里会根据需要重新填充
         self.grid = [[0] * cols for _ in range(rows)]
 
-        # 起点和目标位置可根据需求随机生成或指定
-        self.start = (0, 0)
-        self.goal = (rows - 1, cols - 1)
-
-        # 默认生成传统迷宫，如果需要可自由切换到其他生成算法
-        self.generate_traditional_maze(ensure_path=True)
+    def is_valid(self, r, c):
+        """判断(r,c)是否在迷宫范围内且不是墙（值为0）"""
+        return 0 <= r < self.rows and 0 <= c < self.cols and self.grid[r][c] == 0
 
     def has_valid_path(self):
         """检查是否存在从起点到终点的有效路径"""
+        if not self.is_valid(self.start[0], self.start[1]):
+            return False
+        if not self.is_valid(self.goal[0], self.goal[1]):
+            return False
+
         visited = set()
         queue = deque([self.start])
         visited.add(self.start)
@@ -26,137 +39,186 @@ class Maze:
             if (r, c) == self.goal:
                 return True
 
-            # 检查四个方向
             for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                new_r, new_c = r + dr, c + dc
-                if (
-                    0 <= new_r < self.rows
-                    and 0 <= new_c < self.cols
-                    and self.grid[new_r][new_c] == 0
-                    and (new_r, new_c) not in visited
-                ):
-                    queue.append((new_r, new_c))
-                    visited.add((new_r, new_c))
+                nr, nc = r + dr, c + dc
+                if self.is_valid(nr, nc) and (nr, nc) not in visited:
+                    visited.add((nr, nc))
+                    queue.append((nr, nc))
 
         return False
 
-    def ensure_path_exists(self):
-        """如果迷宫中没有从start到goal的通路，则强行开辟一条直线路径"""
-        if self.has_valid_path():
+    def carve_space_around(self, cell, steps=1):
+        """
+        确保 cell 附近有一定数量的空间，避免把起点/终点埋在墙里。
+        steps 可以视为想要 carve 的“半径”或“额外步数”。
+        （示例中做法很简单：基于 BFS 随机拓展若干步以打通一些区域。）
+        """
+        (sr, sc) = cell
+        if not (0 <= sr < self.rows and 0 <= sc < self.cols):
             return
 
-        # 简单做法：强行打通起点到终点的直线（列优先或行优先均可）
-        r, c = self.start
-        end_r, end_c = self.goal
-        while (r, c) != (end_r, end_c):
+        visited = set()
+        visited.add(cell)
+        frontier = [cell]
+        self.grid[sr][sc] = 0  # 起始格设为通
+
+        # 根据地图大小和需求，建议 steps 不要过大
+        for _ in range(steps):
+            new_frontier = []
+            for r, c in frontier:
+                # 从该点再做随机拓展
+                directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+                random.shuffle(directions)
+                for dr, dc in directions:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < self.rows and 0 <= nc < self.cols:
+                        if (nr, nc) not in visited:
+                            visited.add((nr, nc))
+                            self.grid[nr][nc] = 0
+                            new_frontier.append((nr, nc))
+            frontier = new_frontier
+
+    def bridge_start_goal(self):
+        """
+        如果从 start 到 goal 不可达，则尝试在迷宫中“桥接”两片区域。
+        做法大致：
+        1. 找到 start 所在连通分量 S，goal 所在连通分量 G。
+        2. 如果 S == G 则说明已连通，退出。
+        3. 否则，从 S 和 G 中各拿一个边缘点，沿着两者间的直线或随机线路进行 carve，使得S与G合并。
+        4. 或者做更复杂的多段式桥接，这里给出一个相对简单的示例。
+        """
+
+        # 首先 BFS 获取 start 区域
+        def get_region_bfs(root):
+            region = set()
+            queue = deque([root])
+            region.add(root)
+            while queue:
+                r, c = queue.popleft()
+                for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nr, nc = r + dr, c + dc
+                    if self.is_valid(nr, nc) and (nr, nc) not in region:
+                        region.add((nr, nc))
+                        queue.append((nr, nc))
+            return region
+
+        if not self.is_valid(*self.start):
+            return
+        if not self.is_valid(*self.goal):
+            return
+
+        start_region = get_region_bfs(self.start)
+        if self.goal in start_region:
+            return  # 已连通，不用桥接
+
+        goal_region = get_region_bfs(self.goal)
+        # 找两个最近点，分别在 start_region 和 goal_region 中
+        # （这里可以更智能一些，比如先抽样再计算最短距离，这里简单实现“暴力找最小距离”的示例）
+        min_dist = float("inf")
+        pair_to_connect = (None, None)
+        for sr, sc in start_region:
+            for gr, gc in goal_region:
+                dist = (sr - gr) ** 2 + (sc - gc) ** 2
+                if dist < min_dist:
+                    min_dist = dist
+                    pair_to_connect = ((sr, sc), (gr, gc))
+
+        # 如果找不到合适的点，说明没必要连通或其他情况
+        if pair_to_connect == (None, None):
+            return
+
+        (sr, sc), (gr, gc) = pair_to_connect
+
+        # 用一个简单的随机走近式 carve 来“桥接”两点
+        # （替代原来的“一条笔直线”）
+        r, c = sr, sc
+        attempts = 0
+        max_attempts = self.rows * self.cols  # 防止死循环
+        while (r, c) != (gr, gc) and attempts < max_attempts:
             self.grid[r][c] = 0
-            if r < end_r:
-                r += 1
-            elif r > end_r:
-                r -= 1
-            elif c < end_c:
-                c += 1
-            elif c > end_c:
-                c -= 1
-        self.grid[end_r][end_c] = 0
+            # 随机选择一个方向，让 (r,c) 向 (gr,gc) 移动
+            dr = 0
+            dc = 0
+            if r < gr:
+                dr = 1
+            elif r > gr:
+                dr = -1
+            if c < gc:
+                dc = 1
+            elif c > gc:
+                dc = -1
+
+            # 有一定概率“拐个弯”，避免就是笔直
+            if random.random() < 0.3:
+                # 随机略微往其它方向偏移
+                rand_dir = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
+                dr2, dc2 = rand_dir
+                # 50% 几率用这个拐弯
+                if random.random() < 0.5:
+                    dr, dc = dr2, dc2
+
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < self.rows and 0 <= nc < self.cols:
+                r, c = nr, nc
+            attempts += 1
+
+        # 最后再 carve 终点，以防止它是墙
+        self.grid[gr][gc] = 0
+
+    # ----------------------------------------------------------------
+    # 下面是各类迷宫生成函数（示例）
+    # ----------------------------------------------------------------
 
     def generate_traditional_maze(self, ensure_path=True):
         """
-        使用深度优先搜索(DFS)生成传统迷宫。
-        ensure_path = True ->  迷宫整体连通，从start可达goal
-        ensure_path = False -> 随机生成若干不连通的区域，可能无法从start到goal
+        使用 DFS 生成传统迷宫，但可以通过在 carve 过程中“随机跳过”来控制是否整体连通。
+        ensure_path=True ->  最终会保证从 start 到 goal 连通（通过 bridge）。
+        ensure_path=False -> 最终不一定连通。
         """
         # 初始化所有格子为墙
         self.grid = [[1] * self.cols for _ in range(self.rows)]
 
-        if ensure_path:
-            # --- 完整 DFS 确保整张迷宫连通 ---
-            # 将start强制变为可通行
-            sr, sc = self.start
-            if 0 <= sr < self.rows and 0 <= sc < self.cols:
-                self.grid[sr][sc] = 0
+        def valid_cell(r, c):
+            return 0 <= r < self.rows and 0 <= c < self.cols
 
-            def carve_path(r, c, visited):
-                visited.add((r, c))
-                self.grid[r][c] = 0  # 打通当前格子
+        def carve_path(r, c, visited):
+            visited.add((r, c))
+            self.grid[r][c] = 0  # 打通当前格子
 
-                directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-                random.shuffle(directions)
+            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+            random.shuffle(directions)
 
-                for dr, dc in directions:
-                    nr, nc = r + dr * 2, c + dc * 2
-                    if (
-                        0 <= nr < self.rows
-                        and 0 <= nc < self.cols
-                        and (nr, nc) not in visited
-                        and self.grid[nr][nc] == 1
-                    ):
+            for dr, dc in directions:
+                nr, nc = r + 2 * dr, c + 2 * dc
+                if valid_cell(nr, nc) and (nr, nc) not in visited:
+                    # 为了可能形成不连通区域，加入一个“随机放弃 carve”的机制
+                    if random.random() < 0.5 or ensure_path:
                         # 打通中间墙
                         self.grid[r + dr][c + dc] = 0
                         carve_path(nr, nc, visited)
 
-            visited = set()
-            carve_path(sr, sc, visited)
+        # 将 start 作为 DFS 起点
+        sr, sc = self.start
+        if not valid_cell(sr, sc):
+            sr, sc = 0, 0
 
-            # 如果还是不通，则再强制打通一条路径
-            if not self.has_valid_path():
-                self.ensure_path_exists()
+        # 若起点在墙外，这里先修正一下
+        sr = max(0, min(sr, self.rows - 1))
+        sc = max(0, min(sc, self.cols - 1))
+        carve_path(sr, sc, visited=set())
 
-        else:
-            # --- 随机 DFS 分块生成若干不相连区域，并不保证 start -> goal 可达 ---
-            def carve_isolated_region(sr, sc, max_cells):
-                if self.grid[sr][sc] == 0:  # 如果起点已经是通路，则跳过
-                    return
+        # 若 ensure_path 为 True，则桥接保证可达
+        if ensure_path and not self.has_valid_path():
+            self.bridge_start_goal()
 
-                count = 0
-                stack = [(sr, sc)]
-                visited_local = set()
-
-                while stack and count < max_cells:
-                    r, c = stack.pop()
-                    if (r, c) in visited_local:
-                        continue
-                    visited_local.add((r, c))
-                    self.grid[r][c] = 0
-                    count += 1
-
-                    directions = [(0, 2), (2, 0), (0, -2), (-2, 0)]
-                    random.shuffle(directions)
-                    for dr, dc in directions:
-                        nr, nc = r + dr, c + dc
-                        mid_r, mid_c = r + dr // 2, c + dc // 2
-                        if (
-                            0 <= nr < self.rows
-                            and 0 <= nc < self.cols
-                            and self.grid[nr][nc] == 1
-                        ):
-                            # 随机决定是否继续往该方向 carve
-                            if random.random() < 0.7:
-                                self.grid[mid_r][mid_c] = 0
-                                stack.append((nr, nc))
-
-            # 全墙初始化已经做过，这里做多个不相连区域
-            region_count = random.randint(3, 6)
-            for _ in range(region_count):
-                # 随机找一个起点（偶数行、偶数列常见做法，可自行调整）
-                sr = random.randrange(0, self.rows, 2)
-                sc = random.randrange(0, self.cols, 2)
-                max_region_size = random.randint(
-                    (self.rows * self.cols) // 20,
-                    (self.rows * self.cols) // 10,
-                )
-                carve_isolated_region(sr, sc, max_region_size)
-
-            # 注意：此模式下不再保证 start 和 goal 一定是通的
-            # 如果想让 start, goal 至少是空地，但不一定相互连通，可打开下面注释行
-            # self.grid[self.start[0]][self.start[1]] = 0
-            # self.grid[self.goal[0]][self.goal[1]] = 0
+        # 保证 start/goal 周边有一定空间
+        self.carve_space_around(self.start, steps=1)
+        self.carve_space_around(self.goal, steps=1)
 
     def generate_river_maze(self, ensure_path=True):
         """
-        生成“河流”型迷宫，使通道更狭窄且蜿蜒。
-        ensure_path = True ->  从start蜿蜒走到goal，形成一条主河道
-        ensure_path = False -> 只在地图随机处生成若干条蜿蜒水道，不保证与start或goal连通
+        生成“河流”型迷宫，通道更狭窄且蜿蜒。
+        若 ensure_path=True，则最终桥接 start->goal 。
         """
         # 先将全图置为墙
         self.grid = [[1] * self.cols for _ in range(self.rows)]
@@ -164,10 +226,9 @@ class Maze:
         def in_bounds(r, c):
             return 0 <= r < self.rows and 0 <= c < self.cols
 
-        def carve_narrow_path(r, c, steps, visited, forced_end=False):
+        def carve_narrow_path(r, c, steps, visited):
             """
             从(r,c)开始随机步进 'steps' 步，形成窄且蜿蜒的路径。
-            forced_end=True 时，如果在steps内抵达goal则结束，否则继续随机直到步数结束。
             """
             stack = [(r, c)]
             visited.add((r, c))
@@ -178,215 +239,106 @@ class Maze:
                     break
                 cr, cc = stack[-1]
 
-                # 如果要求强制到goal并且当前到达goal，退出
-                if forced_end and (cr, cc) == self.goal:
-                    break
-
-                # 当前方向倾向
                 directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
                 random.shuffle(directions)
 
                 moved = False
                 for dr, dc in directions:
                     nr, nc = cr + dr, cc + dc
-                    # 保证不越界、没有访问过、保持窄通道
                     if in_bounds(nr, nc) and (nr, nc) not in visited:
-                        # 检查邻居，保证通道不要变宽
-                        # 只允许通道本身以及当前点
+                        # 限制通道宽度：检查周围空地数量
                         open_neighbors = 0
                         for rr in range(nr - 1, nr + 2):
                             for cc2 in range(nc - 1, nc + 2):
                                 if in_bounds(rr, cc2) and self.grid[rr][cc2] == 0:
                                     open_neighbors += 1
-                        # 控制通道“宽度”
-                        # 如果周围已经有较多空地，就跳过
                         if open_neighbors <= 2:
                             self.grid[nr][nc] = 0
                             visited.add((nr, nc))
                             stack.append((nr, nc))
                             moved = True
                             break
-
-                # 如果无法前进，就回溯
                 if not moved:
                     stack.pop()
 
-        if ensure_path:
-            # 先在start->goal之间生成一条较长路径
-            visited = set()
-            # 理论上最多不会超过rows*cols步，但可根据需要调整
-            max_steps = self.rows * self.cols
-            carve_narrow_path(
-                self.start[0], self.start[1], max_steps, visited, forced_end=True
-            )
-            # 如果还没通，就强行打通
-            if not self.has_valid_path():
-                self.ensure_path_exists()
+        visited = set()
+        # 在 (start) 附近开凿一条长河流，保证有机会从 start 出发
+        sr, sc = self.start
+        sr = max(0, min(sr, self.rows - 1))
+        sc = max(0, min(sc, self.cols - 1))
+        max_steps = self.rows * self.cols // 2
+        carve_narrow_path(sr, sc, max_steps, visited)
 
-        else:
-            # 在地图中随机生成若干条河道
-            river_count = (self.rows * self.cols) // 80  # 可根据尺寸灵活调节数量
-            for _ in range(river_count):
-                r = random.randint(0, self.rows - 1)
-                c = random.randint(0, self.cols - 1)
-                visited = set()
-                # 随机长度
-                steps = random.randint(
-                    (self.rows + self.cols) // 2, (self.rows + self.cols)
-                )
-                carve_narrow_path(r, c, steps, visited)
+        # 再随机生成一些小支流
+        river_count = (self.rows * self.cols) // 80
+        for _ in range(river_count):
+            r = random.randint(0, self.rows - 1)
+            c = random.randint(0, self.cols - 1)
+            steps = random.randint(
+                (self.rows + self.cols) // 4, (self.rows + self.cols) // 2
+            )
+            carve_narrow_path(r, c, steps, visited)
+
+        # 桥接
+        if ensure_path and not self.has_valid_path():
+            self.bridge_start_goal()
+
+        # 保证 start/goal 周边有一定空间
+        self.carve_space_around(self.start, steps=1)
+        self.carve_space_around(self.goal, steps=1)
 
     def generate_random_maze(self, wall_ratio=0.3, ensure_path=True):
         """
         生成随机障碍物迷宫
-        ensure_path = True -> 生成时确保存在一条有效路径
-        ensure_path = False -> 纯随机，不保证有通路
+        ensure_path = True -> 最后做桥接保证 start->goal 可达
+        ensure_path = False -> 纯随机，不保证通路
         """
-        if ensure_path:
-            # 类似生长算法，先构建一个联通路径集，再随机决定哪些格子留空
-            self.grid = [[1] * self.cols for _ in range(self.rows)]
-            path_cells = set([self.start])
-            frontier = set()
+        self.grid = []
+        for r in range(self.rows):
+            row = []
+            for c in range(self.cols):
+                # 先保证 start/goal 自己是通的
+                if (r, c) in [self.start, self.goal]:
+                    row.append(0)
+                else:
+                    # 以 wall_ratio 的概率生成墙
+                    row.append(1 if random.random() < wall_ratio else 0)
+            self.grid.append(row)
 
-            # 添加起点周围的候选格子
-            for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                r, c = self.start[0] + dr, self.start[1] + dc
-                if 0 <= r < self.rows and 0 <= c < self.cols:
-                    frontier.add((r, c))
+        if ensure_path and not self.has_valid_path():
+            self.bridge_start_goal()
 
-            # 随机生长直到到达目标或无法继续
-            while frontier and self.goal not in path_cells:
-                current = random.choice(list(frontier))
-                frontier.remove(current)
-
-                # 检查是否有与现有路径相邻
-                neighbors = []
-                r, c = current
-                for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                    nr, nc = r + dr, c + dc
-                    if (nr, nc) in path_cells:
-                        neighbors.append((nr, nc))
-
-                # 有相邻路径时，随机决定是否留空
-                if neighbors and random.random() > wall_ratio:
-                    path_cells.add(current)
-                    self.grid[r][c] = 0
-                    # 添加新的候选格子
-                    for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                        nr, nc = r + dr, c + dc
-                        if (
-                            0 <= nr < self.rows
-                            and 0 <= nc < self.cols
-                            and (nr, nc) not in path_cells
-                            and (nr, nc) not in frontier
-                        ):
-                            frontier.add((nr, nc))
-
-            # 如果目标仍不在通路中，则补救打通
-            if self.goal not in path_cells:
-                # 强制打通起点到终点
-                self.ensure_path_exists()
-        else:
-            self.grid = []
-            for r in range(self.rows):
-                row = []
-                for c in range(self.cols):
-                    if (r, c) in (self.start, self.goal):
-                        row.append(0)
-                    else:
-                        row.append(1 if random.random() < wall_ratio else 0)
-                self.grid.append(row)
+        # 保证 start/goal 附近通
+        self.carve_space_around(self.start, steps=1)
+        self.carve_space_around(self.goal, steps=1)
 
     def generate_block_maze(self, min_size=3, max_size=6, ensure_path=True):
         """
-        生成块状障碍物，类似“巨石”分布。
-        ensure_path=True -> 先确保起点到终点可达，再随机放置块状障碍
-        ensure_path=False -> 纯随机放置块状障碍
+        生成块状障碍物，类似于在空地上随机放置一些“巨石”或大方块。
+        ensure_path=True -> 最后保证 start->goal 可达（桥接）
+        ensure_path=False -> 不一定通
         """
+        # 先把全图置为可通
         self.grid = [[0] * self.cols for _ in range(self.rows)]
 
-        if ensure_path:
-            # 先打通一条基础路径
-            current = self.start
-            path = [current]
-            while current != self.goal:
-                cr, cc = current
-                # 随机走向更接近goal的方向
-                dr = 0
-                dc = 0
-                if cr < self.goal[0]:
-                    dr = 1
-                elif cr > self.goal[0]:
-                    dr = -1
-                elif cc < self.goal[1]:
-                    dc = 1
-                elif cc > self.goal[1]:
-                    dc = -1
-                nr, nc = cr + dr, cc + dc
-                if 0 <= nr < self.rows and 0 <= nc < self.cols:
-                    current = (nr, nc)
-                    path.append(current)
-                else:
-                    break
+        # 随机放置块状障碍
+        block_count = (self.rows * self.cols) // 25
+        for _ in range(block_count):
+            size = random.randint(min_size, max_size)
+            r = random.randint(0, self.rows - size)
+            c = random.randint(0, self.cols - size)
+            for i in range(size):
+                for j in range(size):
+                    rr = r + i
+                    cc = c + j
+                    # 如果正好是 start/goal，就不要覆盖成墙
+                    if (rr, cc) not in (self.start, self.goal):
+                        self.grid[rr][cc] = 1
 
-            # 打通路径
-            for r, c in path:
-                self.grid[r][c] = 0
+        # 如果要求可达，就桥接
+        if ensure_path and not self.has_valid_path():
+            self.bridge_start_goal()
 
-            # 在不破坏已通路的前提下放置障碍
-            block_count = (self.rows * self.cols) // 25
-            for _ in range(block_count):
-                size = random.randint(min_size, max_size)
-                placed = False
-                for _attempt in range(50):
-                    r = random.randint(0, self.rows - size)
-                    c = random.randint(0, self.cols - size)
-                    # 检查该区块是否会覆盖已有路径
-                    conflict = False
-                    for i in range(size):
-                        for j in range(size):
-                            if (r + i, c + j) in path:
-                                conflict = True
-                                break
-                        if conflict:
-                            break
-                    if not conflict:
-                        # 放置障碍块
-                        for i in range(size):
-                            for j in range(size):
-                                self.grid[r + i][c + j] = 1
-                        placed = True
-                        break
-                # 如果50次都没放置成功就放弃该块
-        else:
-            # 纯随机放置块状障碍
-            self.grid = [[0] * self.cols for _ in range(self.rows)]
-            block_count = (self.rows * self.cols) // 25
-            for _ in range(block_count):
-                size = random.randint(min_size, max_size)
-                r = random.randint(0, self.rows - size)
-                c = random.randint(0, self.cols - size)
-                for i in range(size):
-                    for j in range(size):
-                        if (r + i, c + j) not in (self.start, self.goal):
-                            self.grid[r + i][c + j] = 1
-
-    def is_valid(self, r, c):
-        """判断(r,c)是否在迷宫范围内且不是墙（值为0）"""
-        return (0 <= r < self.rows) and (0 <= c < self.cols) and (self.grid[r][c] == 0)
-
-
-if __name__ == "__main__":
-    # 简单测试
-    maze = Maze(rows=21, cols=31)
-    maze.generate_traditional_maze(ensure_path=False)  # 不保证 start->goal 有通路
-    print("Maze with ensure_path=False (traditional):", maze.has_valid_path())
-
-    maze.generate_traditional_maze(ensure_path=True)  # 保证可达到
-    print("Maze with ensure_path=True (traditional):", maze.has_valid_path())
-
-    maze.generate_river_maze(ensure_path=False)
-    print("River maze (ensure_path=False):", maze.has_valid_path())
-
-    maze.generate_river_maze(ensure_path=True)
-    print("River maze (ensure_path=True):", maze.has_valid_path())
+        # 保证 start/goal 附近通
+        self.carve_space_around(self.start, steps=1)
+        self.carve_space_around(self.goal, steps=1)
