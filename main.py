@@ -20,6 +20,10 @@ class MazeApp:
         else:
             sv_ttk.use_light_theme()
 
+        # 设置默认字体
+        self.default_font = ("等线", 10)
+        self.small_font = ("等线", 8)
+
         # 初始化界面布局
         self.setup_ui()
 
@@ -55,14 +59,17 @@ class MazeApp:
             left_button_frame, text="生成新迷宫", command=self.on_generate_maze
         )
         generate_button.pack(side=tk.LEFT, padx=5)
+        generate_button.configure(style="Custom.TButton")
 
         self.start_button = ttk.Button(
             left_button_frame, text="开始求解", command=self.on_start_solving
         )
         self.start_button.pack(side=tk.LEFT, padx=5)
+        self.start_button.configure(style="Custom.TButton")
 
         reset_button = ttk.Button(left_button_frame, text="重置", command=self.on_reset)
         reset_button.pack(side=tk.LEFT, padx=5)
+        reset_button.configure(style="Custom.TButton")
 
         # 右侧控制组
         right_control_frame = ttk.Frame(control_frame)
@@ -73,6 +80,7 @@ class MazeApp:
             right_control_frame, text="切换主题", command=self.toggle_theme
         )
         theme_button.pack(side=tk.RIGHT, padx=5)
+        theme_button.configure(style="Custom.TButton")
 
         # 速度控制组
         speed_frame = ttk.LabelFrame(main_frame, text="动画速度")
@@ -89,7 +97,9 @@ class MazeApp:
         speed_scale.pack(fill=tk.X, padx=10, pady=5)
 
         # 添加速度说明标签
-        speed_label = ttk.Label(speed_frame, text="向右拖动提高速度", font=("", 8))
+        speed_label = ttk.Label(
+            speed_frame, text="向右拖动提高速度", font=self.small_font
+        )
         speed_label.pack(pady=(0, 5))
 
     def create_canvas(self):
@@ -190,7 +200,7 @@ class MazeApp:
         )
         if text:
             self.canvas.create_text(
-                (x1 + x2) / 2, (y1 + y2) / 2, text=text, font=("Arial", 8)
+                (x1 + x2) / 2, (y1 + y2) / 2, text=text, font=self.small_font
             )
 
     def draw_wall(self, x1, y1, x2, y2):
@@ -281,6 +291,10 @@ class MazeApp:
 
 def main():
     root = tk.Tk()
+    # 创建自定义样式
+    style = ttk.Style()
+    style.configure("Custom.TButton", font=("等线", 10))
+    style.configure("TLabelframe.Label", font=("等线", 10))
     app = MazeApp(root)
     root.mainloop()
 
