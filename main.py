@@ -5,13 +5,19 @@ import darkdetect
 from tkinter import messagebox
 
 from maze import Maze
-from solver import AStarSolver
+from solver import (
+    AStarSolver,
+    DFSSolver,
+    BFSSolver,
+    DijkstraSolver,
+    BidirectionalBFSSolver,
+)
 
 
 class MazeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("迷宫求解可视化演示（A*）")
+        self.root.title("迷宫求解可视化演示")
 
         # 主题设置
         self.is_dark = darkdetect.isDark()
@@ -24,17 +30,26 @@ class MazeApp:
         self.default_font = ("等线", 10)
         self.small_font = ("等线", 8)
 
-        # 初始化界面布局
-        self.setup_ui()
-
         # 初始化迷宫对象和求解算法
         self.maze_size = 20  # 可以根据需要调整迷宫大小
         self.maze = Maze(self.maze_size, self.maze_size)
         self.cell_size = 25
 
-        self.solver = AStarSolver(self.maze)
+        # 算法字典
+        self.solver_classes = {
+            "A*算法": AStarSolver,
+            "深度优先搜索": DFSSolver,
+            "广度优先搜索": BFSSolver,
+            "Dijkstra算法": DijkstraSolver,
+            "双向广度优先搜索": BidirectionalBFSSolver,
+        }
+        self.current_algorithm = "A*算法"
+        self.solver = self.solver_classes[self.current_algorithm](self.maze)
         self.is_solving = False
         self.after_id = None
+
+        # 初始化界面布局
+        self.setup_ui()
 
         # 创建迷宫画布
         self.create_canvas()
@@ -60,6 +75,22 @@ class MazeApp:
         )
         generate_button.pack(side=tk.LEFT, padx=5)
         generate_button.configure(style="Custom.TButton")
+
+        # 算法选择下拉框
+        algorithm_frame = ttk.Frame(left_button_frame)
+        algorithm_frame.pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(algorithm_frame, text="算法：").pack(side=tk.LEFT)
+        self.algorithm_var = tk.StringVar(value=self.current_algorithm)
+        algorithm_combo = ttk.Combobox(
+            algorithm_frame,
+            textvariable=self.algorithm_var,
+            values=list(self.solver_classes.keys()),
+            state="readonly",
+            width=15,
+        )
+        algorithm_combo.pack(side=tk.LEFT)
+        algorithm_combo.bind("<<ComboboxSelected>>", self.on_algorithm_changed)
 
         self.start_button = ttk.Button(
             left_button_frame, text="开始求解", command=self.on_start_solving
@@ -225,16 +256,16 @@ class MazeApp:
 
     def on_generate_maze(self):
         """
-        点击“生成新迷宫”按钮后回调，重新生成迷宫
+        点击"生成新迷宫"按钮后回调，重新生成迷宫
         """
         self.stop_solving()
         self.maze.generate_random_maze()
-        self.solver = AStarSolver(self.maze)
+        self.solver = self.solver_classes[self.current_algorithm](self.maze)
         self.draw_maze()
 
     def on_start_solving(self):
         """
-        点击“开始求解”按钮后回调
+        点击"开始求解"按钮后回调
         """
         if self.is_solving:
             return
@@ -268,7 +299,7 @@ class MazeApp:
         重置迷宫状态，不重新生成迷宫
         """
         self.stop_solving()
-        self.solver = AStarSolver(self.maze)
+        self.solver = self.solver_classes[self.current_algorithm](self.maze)
         self.draw_maze()
 
     def toggle_theme(self):
@@ -287,6 +318,12 @@ class MazeApp:
         if self.after_id is not None:
             self.root.after_cancel(self.after_id)
             self.after_id = None
+
+    def on_algorithm_changed(self, event):
+        """当选择的算法改变时调用"""
+        self.current_algorithm = self.algorithm_var.get()
+        self.solver = self.solver_classes[self.current_algorithm](self.maze)
+        self.on_reset()  # 重置当前状态
 
 
 def main():
