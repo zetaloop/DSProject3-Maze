@@ -163,17 +163,15 @@ class BidirectionalBFSSolver(BaseSolver):
         path_from_start.append(self.start)
         path_from_start.reverse()
 
-        # 从 meeting_point 往回走到 goal
+        # 从 meeting_point 往前走到 goal
         path_to_goal = []
-        cur = self.meeting_point
-        while cur in self.goal_came_from:
+        cur = self.goal_came_from[self.meeting_point]  # 从 meeting_point 的下一个点开始
+        while cur != self.goal:  # 直到到达终点
             path_to_goal.append(cur)
             cur = self.goal_came_from[cur]
-        # meeting_point 在上一部分也出现过，这里去重处理
-        if path_to_goal:
-            path_to_goal.pop(0)  # 移除 meeting_point 的重复
+        path_to_goal.append(self.goal)  # 添加终点
 
-        path_to_goal.reverse()
+        # 合并路径
         self.path = path_from_start + path_to_goal
 
     def expand_front(self, queue, visited, other_visited, came_from):
@@ -186,6 +184,7 @@ class BidirectionalBFSSolver(BaseSolver):
 
         current = queue.popleft()
         self.frontier_set.discard(current)
+        self.visited.add(current)  # 添加到总的已访问集合中
 
         if current in other_visited:
             return current  # 相遇
