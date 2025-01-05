@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import sv_ttk
+import darkdetect
 from tkinter import messagebox
 
 from maze import Maze
@@ -13,8 +14,11 @@ class MazeApp:
         self.root.title("迷宫求解可视化演示（A*）")
 
         # 主题设置
-        self.is_dark = True
-        sv_ttk.use_dark_theme()
+        self.is_dark = darkdetect.isDark()
+        if self.is_dark:
+            sv_ttk.use_dark_theme()
+        else:
+            sv_ttk.use_light_theme()
 
         # 初始化界面布局
         self.setup_ui()
