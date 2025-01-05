@@ -70,20 +70,6 @@ class MazeApp:
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # 上方按钮区域
-        control_frame = ttk.Frame(main_frame)
-        control_frame.pack(side=tk.TOP, fill=tk.X, pady=5)
-
-        # 左侧按钮组
-        left_button_frame = ttk.Frame(control_frame)
-        left_button_frame.pack(side=tk.LEFT)
-
-        generate_button = ttk.Button(
-            left_button_frame, text="生成新迷宫", command=self.on_generate_maze
-        )
-        generate_button.pack(side=tk.LEFT, padx=5)
-        generate_button.configure(style="Custom.TButton")
-
         # 算法选择区域
         algorithm_frame = ttk.LabelFrame(main_frame, text="算法选择")
         algorithm_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -114,27 +100,6 @@ class MazeApp:
         )
         self.description_label.pack(fill=tk.X, padx=5, pady=5)
 
-        # 控制按钮组
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        self.start_button = ttk.Button(
-            button_frame, text="开始求解", command=self.on_start_solving
-        )
-        self.start_button.pack(side=tk.LEFT, padx=5)
-        self.start_button.configure(style="Custom.TButton")
-
-        reset_button = ttk.Button(button_frame, text="重置", command=self.on_reset)
-        reset_button.pack(side=tk.LEFT, padx=5)
-        reset_button.configure(style="Custom.TButton")
-
-        # 主题切换按钮
-        theme_button = ttk.Button(
-            button_frame, text="切换主题", command=self.toggle_theme
-        )
-        theme_button.pack(side=tk.RIGHT, padx=5)
-        theme_button.configure(style="Custom.TButton")
-
         # 速度控制组
         speed_frame = ttk.LabelFrame(main_frame, text="动画速度")
         speed_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -155,6 +120,41 @@ class MazeApp:
             font=self.small_font,
         )
         speed_label.pack(pady=(0, 5))
+
+        # 控制按钮区域
+        control_frame = ttk.Frame(main_frame)
+        control_frame.pack(fill=tk.X, pady=5)
+
+        # 左侧按钮组
+        left_button_frame = ttk.Frame(control_frame)
+        left_button_frame.pack(side=tk.LEFT)
+
+        generate_button = ttk.Button(
+            left_button_frame, text="生成新迷宫", command=self.on_generate_maze
+        )
+        generate_button.pack(side=tk.LEFT, padx=5)
+        generate_button.configure(style="Custom.TButton")
+
+        self.start_button = ttk.Button(
+            left_button_frame, text="开始求解", command=self.on_start_solving
+        )
+        self.start_button.pack(side=tk.LEFT, padx=5)
+        self.start_button.configure(style="Custom.TButton")
+
+        reset_button = ttk.Button(left_button_frame, text="重置", command=self.on_reset)
+        reset_button.pack(side=tk.LEFT, padx=5)
+        reset_button.configure(style="Custom.TButton")
+
+        # 右侧按钮组
+        right_button_frame = ttk.Frame(control_frame)
+        right_button_frame.pack(side=tk.RIGHT)
+
+        # 主题切换按钮
+        theme_button = ttk.Button(
+            right_button_frame, text="☀", command=self.toggle_theme
+        )
+        theme_button.pack(side=tk.RIGHT, padx=5)
+        theme_button.configure(style="Custom.TButton")
 
     def create_canvas(self):
         """
@@ -307,7 +307,7 @@ class MazeApp:
         if done:
             self.is_solving = False
             if self.solver.path:  # 如果找到路径
-                messagebox.showinfo("完成", "已找到最短路径！")
+                messagebox.showinfo("完成", "已到达终点！")
             else:
                 messagebox.showwarning("提示", "无法找到可行路径。")
             return
