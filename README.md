@@ -1,5 +1,9 @@
 # 迷宫寻路算法可视化演示
 
+<img width="300" alt="Snipaste_2025-01-08_11-02-52" src="https://github.com/user-attachments/assets/3f793cb4-317a-4c25-9d7a-c52ebd8c87ea" />
+<img width="300" alt="Snipaste_2025-01-08_11-01-02" src="https://github.com/user-attachments/assets/792abc6b-fe03-4338-82e4-4cec8a8d7772" />
+<img width="300" alt="Snipaste_2025-01-08_11-04-30" src="https://github.com/user-attachments/assets/c81d3007-1c81-43cb-bb09-c09a9ab059b3" />
+
 这是一个用Python开发的迷宫寻路算法可视化演示程序，旨在帮助用户直观地理解和比较不同寻路算法的工作原理和性能特点。
 
 ## 功能特性
