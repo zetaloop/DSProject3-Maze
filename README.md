@@ -1,4 +1,4 @@
-# 迷宫寻路算法可视化演示
+# 迷宫寻路算法可视化演示（课程作业）
 
 <img width="250" alt="Snipaste_2025-01-08_11-02-52" src="https://github.com/user-attachments/assets/3f793cb4-317a-4c25-9d7a-c52ebd8c87ea" />
 <img width="250" alt="Snipaste_2025-01-08_11-01-02" src="https://github.com/user-attachments/assets/792abc6b-fe03-4338-82e4-4cec8a8d7772" />
